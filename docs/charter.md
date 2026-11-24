@@ -1,0 +1,519 @@
+# nexus 重写任务书
+
+| 项 | 内容 |
+|---|---|
+| 产品代号 | nexus（沿用） |
+| 仓库 | `nexus2` —— 全新 git 仓，不继承旧仓的代码、钩子、远端 |
+| 文档 | `docs/charter.md`（本文件） |
+| 状态 | **草案 v0.1，未定稿、未开工** —— 待接入两份文档：SWOT 分析、产品 VRM 框架 |
+| 日期 | 2026-11-24 |
+| 读者 | 产品负责人（人）；规格代理、实现代理、审查代理、对账代理 |
+
+**三条总则**
+
+1. 实现代理只读本任务书和 `docs/` 下的规格与决策记录，**禁止阅读旧仓代码**。
+2. 提炼行为的规格代理必须读旧代码、旧测试、旧文档。行为清单只能来自证据，不能来自印象。
+3. 本文件定稿前不写任何实现代码。
+
+**怎么读**：产品负责人读 §0–§2、§8–§10、§12；规格代理读全文；实现代理读 §0、§3、§5、§6、§11。
+
+## 0. 一句话
+
+把 nexus 重写成一个**前后端完全分离、契约驱动、边界由机器强制**的 Web 平台内核：
+任何智能体都能在单一上下文内读懂一个模块，任意多个智能体可以互不干扰地并行开发它。
+
+## 1. 决定与依据
+
+### 1.1 决定
+
+2026-11-24，产品负责人决定：**停止在旧仓上修补，全新重写**。
+
+| # | 决定 | 含义 |
+|---|---|---|
+| D-1 | 重写，不重构 | 结构债靠逐处修补清不掉；对代理而言，按规格新写比读懂再改便宜 |
+| D-2 | 只做 Web | 新版 = 浏览器端 + 服务端。桌面壳、开发者本机端、离线应用不进新版 |
+| D-3 | 新文件夹、新仓 | 旧仓原地保留并继续运行，直到切换完成 |
+| D-4 | 写规格者读旧码，实现者不读 | 行为从旧代码、旧测试、旧文档提炼成规格；实现代理只拿规格 |
+| D-5 | 自查做成机械对账 | 旧系统在线作活体对照：逐路由对账、同请求双跑、真实入口 E2E |
+
+### 1.2 依据
+
+当日实测（明细见附录 A）：
+
+| 症状 | 实测 |
+|---|---|
+| 工具比产品还重 | 工具链 35,818 行，产品代码 35,777 行 |
+| 页面失控 | 三个单文件页面共 8,897 行，占一方页面代码约七成 |
+| 后端失控 | `prod/app.py` 单文件 2,955 行，装了 58 个路由 |
+| 没有数据层 | 裸 sqlite 连接 21 处、`.jsonl` 文件存储 47 处，无迁移 |
+| 性能 | 同步 HTTP 调用 109 处、同步子进程 73 处，转线程池的只有 31 处 |
+| 依赖漂移 | 服务端没有依赖清单；页面资源还有三组内容不同的重复副本 |
+
+这些都是结构问题，不是哪一行写错了。
+
+## 2. 目标与非目标
+
+### 2.1 目标
+
+| # | 目标 | 完成的判定 |
+|---|---|---|
+| G1 功能对齐 | 旧系统的每个能力都有归宿 | 272 个旧路由逐条登记：新实现，或明确退役并签收；不存在「遗漏」状态 |
+| G2 完全分离 | 前后端是两个独立应用 | 零共享运行时代码；唯一共享物是生成的契约包；各自独立部署、独立发版 |
+| G3 可并行 | 多个代理互不干扰 | 任一模块的「模块卡 + 契约 + 代码 + 测试」装得进上下文预算；任务范围由 CI 判定 |
+| G4 结构清零 | 数据、类型、依赖、资源各只有一个来源 | 单数据库 + 迁移；类型从表贯到页面；锁文件入库；无重复副本 |
+| G5 模型无关 | 换模型只改配置 | AI 能力 = 任务定义 + 评测集 + 路由表；新模型经评测晋级 |
+| G6 性能可证 | 性能是数字，不是感受 | 请求路径零阻塞由 lint 保证；性能预算进 CI（§10.3） |
+| G7 可读 | 架构自己解释自己 | 新代理 10 分钟内起全栈，并提交第一个通过 CI 的变更 |
+
+### 2.2 非目标
+
+- 桌面壳、开发者本机端、离线应用。
+- 微服务、Kubernetes、多租户 SaaS、原生移动端。
+- 复刻旧代码的结构、命名、兼容层；复刻旧工具链（被 CI 取代）。
+- 追逐新技术本身。采用新技术的唯一标准：它让系统更可分、更可验、更可读。
+
+### 2.3 范围：已知产品面（暂定）
+
+下表来自旧仓的文件名，语义以 D2 行为清点为准。
+
+| 产品面 | 已知领域 |
+|---|---|
+| 生产面 | 登录、应用大厅、意见反馈、归档、单点登录 |
+| 开发面 | 工程、预览与沙盒、任务队列与派发、数据工单与数据地图、发布、文档、AI 接入、意见反馈 |
+| 控制芯核 | 事件文献库、探测器、分诊、事件归档与关联、规则、回执、审批、名人堂 |
+| 横切 | 身份与权限、AI 网关、通知与实时、运维（健康、审计、迁移） |
+
+原先挂在本机端的集成（预览中继、DSH 中继、离线应用、收件箱同步）在 D2 逐个判定：改成服务端形态，或暂缓。
+
+## 3. 架构主张
+
+### 3.1 总命题
+
+**模型提供智能，架构提供三样东西：可分、可验、可读。**
+
+并行开发的吞吐 ≈ 代理数 × 不被阻塞的时间占比 ÷ 反馈回路的延迟。模型再强，只要被合并冲突、等待验证、通读全仓中的任何一样卡住，速度就是零。架构的全部工作是去掉这三个阻塞，不是替模型思考。模型每强一代，这三样就越值钱。
+
+### 3.2 形态
+
+风格：**契约驱动的模块化单体 + 无头内核**。不拆微服务：边界写在代码和 lint 规则里，而不是写在网络和运维账单里。模块接缝保持干净，将来某个模块确需独立伸缩时可以原样拆出。
+
+```
+人（浏览器 SPA）        智能体（任意模型）        运维（命令行）
+      │ HTTP / WebSocket       │ MCP 工具 / 任务队列     │
+      ▼                        ▼                        ▼
+   ┌── 无头内核 api ────────────────────────────────────────────
+   │ 组合根：普通函数显式装配 —— 无容器、无反射、无装饰器
+   │
+   │  identity · projects · jobs · cybernetics · ai · …        ← 领域模块
+   │  每个模块 = 路由 + 用例 + 仓储 + 表 + 事件 + 测试
+   │  跨模块只走公开接口与事件，不读不写对方的表
+   │
+   │  事件日志（事务性发件箱）
+   └──────────────────────────┬───────────────────────────────
+                              ▼
+              PostgreSQL —— 唯一事实源
+     关系 / 文档 / 全文检索 / 向量 / 队列 / 发布订阅
+```
+
+### 3.3 十一条主张
+
+| # | 主张 | 内容 | 换来什么 |
+|---|---|---|---|
+| P1 | 无头内核 | 后端是不含界面逻辑的能力内核，只讲三种话：HTTP / WebSocket API、MCP 工具、命令行。Web 界面只是它的一个客户端，智能体是另一些客户端 | 界面上每个动作背后都是一次 API 调用；不会出现「只有人能点、代理调不到」的功能 |
+| P2 | 契约是唯一接缝 | 前后端之间、模块之间、平台与智能体之间，只通过版本化契约连接：OpenAPI（HTTP）、事件 schema（异步）、Zod schema（数据形状）。契约由代码生成、入库为产物 | 任何人改契约，所有使用方当场编译失败 |
+| P3 | 模块自治 | 一个模块 = 路由 + 用例 + 仓储 + 表 + 事件 + 测试，住在自己目录里。跨模块只准调用对方公开接口或订阅其事件，不准读写对方的表和内部文件。模块依赖必须无环 | 并行度的上限 = 边界的清晰度 |
+| P4 | 显式依赖，零魔法 | 不用装饰器注入、不用反射、不用运行时代码生成。依赖在组合根里用普通函数参数显式接线。只用可擦除语法 | 依赖图肉眼可见、工具可静态分析；模型不需要记框架咒语 |
+| P5 | 类型贯通 | 数据库 schema → 领域类型 → API schema → 页面 props 是一条类型链，全程 strict | 层间改名漏改直接编译失败 |
+| P6 | 单一事实源 | PostgreSQL 是唯一事实源；规则是数据，不散落在代码里；文档与代码同仓 | 能不加中间件就不加 |
+| P7 | 事件为骨 | 跨模块联动和对外通知一律走事务性发件箱事件日志。时间线、通知、自动化、审计都是事件的投影 | 模块之间零直接调用也零丢事件；审计天然可回放 |
+| P8 | 机器即裁判 | 类型、架构规则、测试、契约校验、性能预算、任务范围闸，全部是 CI 里的命令。「完成」必须是机器可判定的 | 代理自己就能知道对错，不用等人 |
+| P9 | 仓库即大脑 | 代理工作所需的一切都在仓里：`AGENTS.md`（入口）、规格、决策记录、术语表、任务图。写下来的才算数 | 任何新代理都能立即开工 |
+| P10 | 模型无关 | 不绑定任何模型厂商。平台只依赖通用能力（工具调用、结构化输出、长上下文），不依赖提示词技巧 | 模型每强一代，产品自动受益 |
+| P11 | 上下文预算 | 可读性量化：单文件不超过 400 行，单个 `service.ts` 不超过 300 行，超限 lint 报错。办法是拆模块，不是调大限额（初值，D1 校准） | 任何模块都能被一个代理一次读完 |
+
+### 3.4 「前后端完全分离」的四个含义
+
+1. **代码分离**：`apps/web` 与 `apps/api` 是两个独立应用，零共享运行时代码。唯一共享物是 `packages/api-client`，它由 OpenAPI 生成。
+2. **契约分离**：OpenAPI 文档是接口的唯一真相。前端只认识生成的类型和客户端，后端不渲染 HTML、不内嵌页面资源、不含界面文案。
+3. **部署分离**：`api` 是常驻服务，`web` 是纯静态产物。各自独立发版。默认同源反代（页面与 `/api` 同域），只有确需跨域时才开 CORS 白名单。
+4. **协作分离**：契约冻结的那一刻起，前端代理和后端代理可以完全并行。
+
+## 4. 技术栈基线
+
+### 4.1 选型
+
+| 层 | 选型 | 依据（2026-11 联网核对，摘要级，见 §4.4） |
+|---|---|---|
+| 语言 | TypeScript 7（Go 原生编译器）；`strict` + `erasableSyntaxOnly` + `verbatimModuleSyntax` | TS 7.0 于 2026-07-08 正式发布，类型检查约快 10 倍；只用可擦除语法，Node 可直接运行 |
+| 运行时 | Node.js LTS，不低于 24.12，推荐 26 LTS | 原生去类型执行自 24.12.0 / 25.2.0 起稳定；开发态零构建步骤 |
+| 包与编排 | pnpm + Turborepo；`packageManager` 钉版本，锁文件入库 | 依赖确定，任务有缓存 |
+| 后端 | Hono + `@hono/zod-openapi` | 约 14 kB、标准 Web API、schema-first 直接产出 OpenAPI 3.1；无装饰器无反射，天然符合可擦除语法 |
+| 数据库 | PostgreSQL + Drizzle ORM + 迁移（SQL 文件入库） | SQL 可控、体积小；向量检索按需启用 pgvector |
+| 队列与定时 | pg-boss | 纯 Postgres，不引入 Redis |
+| 实时 | SSE + WebSocket | 单向流与双向各用其所 |
+| 认证 | 服务端会话 Cookie（HttpOnly）+ OIDC；口令用 argon2id | 身份权威沿用现有 IdP（§7.1） |
+| 前端 | React + Vite 8（Rolldown）+ TanStack Router / Query + Tailwind CSS + shadcn/ui + Zustand | 2026 年新项目的主流组合；路由与搜索参数全类型化；shadcn 官方支持 TanStack |
+| 契约 | 后端产出 OpenAPI → `openapi-typescript` 生成 → `packages/api-client` | 前后端唯一共享物 |
+| 测试 | Vitest + MSW + Playwright；数据库测试默认跑进程内 Postgres（PGlite），发布前对真 Postgres 复跑 | 毫秒级反馈，不依赖 Docker（D1 校准） |
+| 质量闸 | tsgo 类型检查 + oxlint / oxfmt + dependency-cruiser（架构规则）+ GitHub Actions | 秒级；架构规则不靠自觉 |
+| 观测 | pino 结构化日志 + 请求 ID；OpenTelemetry 预留 | 证据先行排障 |
+| 智能体接口 | MCP Server + 任务队列 | MCP 到 2026 年中已有上万个生产服务，2026-07-28 发布新版规范 |
+| 部署 | systemd + nginx（不变）；原子发布目录 + 健康检查 + 符号链接切换 | 运维知识全部保留 |
+
+### 4.2 相对上一轮推荐的两处变更
+
+**NestJS → Hono。** NestJS 靠装饰器元数据做依赖注入，而元数据发射不被 Node 原生去类型执行支持（esbuild、Babel 同样不支持）；它适配 TS 7 的 CLI 议题 2026-07 才立案。也就是说，它与「2026 工具链原生跑 TypeScript」相冲。Hono 零魔法，结构由我们自己的模块模板和 lint 规则强制。并行代理最需要的正是边界机器可检，而不是藏在框架容器里。
+
+**Ant Design → shadcn/ui + Tailwind。** 标准提到了「2026 最优雅、教科书级」。shadcn + Tailwind 是 2026 年新项目的通用形态，代理写得最熟，样式完全可控。代价是我们自己维护一层 `ui-kit`（表格、表单壳、页框等五六个组合件）；换来的是无论哪个代理写页面都长一个样。
+
+### 4.3 明确不采用
+
+| 不采用 | 一句话原因 |
+|---|---|
+| 微服务、Kubernetes | 这个规模用不上；边界由代码和 lint 强制，成本更低、一样硬 |
+| Redis、Kafka | Postgres 已覆盖队列、发布订阅、缓存 |
+| GraphQL | OpenAPI + MCP 足以服务页面与智能体；少一层运行时 |
+| Bun 作生产运行时 | 安装和测试确实快，但 2026 年的共识是生产仍以 Node 为稳；需要时只当加速工具 |
+| Effect | 类型安全性很高，但概念税重、训练语料薄，与「模型越换越强」相悖 |
+| Next.js、服务端渲染 | 把前后端重新粘在一起，违背完全分离 |
+| tRPC | 前后端靠共享代码耦合；我们要的是可移植的契约产物 |
+| 枚举、参数属性等不可擦除语法 | Node 原生不执行；改用联合类型和普通字段 |
+
+### 4.4 核对说明
+
+以上依据来自搜索摘要级核对：网页正文抓取被网络策略拦截，未能逐篇读原文，个别文章日期存疑。**D1 第一步是技术雷达复核**：以开工当日的稳定版本为准并锁死；如有出入，以复核结果修订本节并记 ADR。
+
+## 5. 仓库形态
+
+### 5.1 目录骨架
+
+```
+nexus/
+├─ AGENTS.md              代理入口：命令、地图、铁律（一页以内）
+├─ README.md              人的入口
+├─ docs/
+│  ├─ charter.md          本任务书
+│  ├─ adr/                架构决策记录（编号 · 背景 · 决定 · 后果）
+│  ├─ spec/               常青规格：按领域一册（行为 + 验收）
+│  ├─ changes/            变更提案：proposal → spec → design → tasks
+│  ├─ parity/             旧系统路由对账表
+│  ├─ strategy/           SWOT 等战略文档
+│  ├─ glossary.md         术语表：中文产品名 ↔ 代码标识符
+│  └─ playbook/           旧仓实弹教训 → 新版硬规则
+├─ apps/                  装配层，不含业务
+│  ├─ api/                后端应用：组合根 + 中间件 + 进程生命周期
+│  ├─ web/                前端应用（SPA）：路由 + 页面装配
+│  ├─ mcp/                MCP Server：把内核能力暴露为智能体工具
+│  └─ cli/                管理与运维命令
+├─ modules/               领域模块，业务唯一住处
+│  └─ <domain>/
+├─ packages/              不含业务的可复用件
+│  ├─ api-client/         由 OpenAPI 生成 —— 前后端唯一共享物
+│  ├─ contracts/          事件 schema、共享 Zod schema
+│  ├─ ui-kit/             设计系统 + 领域级组合组件
+│  └─ config/             tsconfig、oxlint、依赖规则
+├─ infra/                 systemd unit、nginx 配置、部署脚本
+└─ .github/workflows/     四级闸
+```
+
+### 5.2 依赖方向
+
+只允许一个方向：`apps/* → modules/* → packages/*`。反向与跨层跳级一律违规，由 dependency-cruiser 报错。
+
+`apps/web` 只能依赖 `packages/api-client`、`packages/contracts`、`packages/ui-kit`，永远不 import `modules/*`。
+
+### 5.3 模块解剖
+
+```
+modules/<domain>/
+├─ module.md      模块卡（一页）：职责 / 公开接口 / 发出与订阅的事件 / 拥有的表 / 不做什么
+├─ index.ts       唯一出口：create<Domain>Module(deps) → { routes, jobs, events }
+├─ routes.ts      HTTP：schema-first 路由，只做解析、鉴权、调用用例
+├─ service.ts     用例：业务规则唯一住处，纯函数 + 显式依赖
+├─ repo.ts        数据访问：唯一允许写 SQL 的文件
+├─ schema.ts      本模块拥有的表
+├─ events.ts      发出与订阅的事件 schema
+└─ *.test.ts      与实现同目录
+```
+
+### 5.4 上下文预算
+
+见 P11。数值是初值，D1 用真实模块校准后写进 lint 规则。
+
+## 6. 协同开发协议
+
+### 6.1 角色
+
+| 角色 | 谁 | 职责 |
+|---|---|---|
+| 产品负责人 | 人 | 定意图与优先级；用真实使用来验收；只判断意图和价值 |
+| 编排者 | 强模型代理 | 把变更提案拆成任务 DAG、派发、合并、维护常青规格 |
+| 规格代理 | 读旧码的代理 | 从任务书、SWOT、VRM、旧系统行为清单写出常青规格与验收标准 |
+| 实现代理 | 可多个并行 | 每个任务一个新鲜上下文；只读任务卡允许的材料；不读旧仓 |
+| 审查代理 | 干净上下文 | 独立验证；只看任务卡、diff、CI 输出 |
+| 对账代理 | 干净上下文 | 新旧对照：路由对账、同请求双跑 |
+
+### 6.2 三性与对应机制
+
+| 性质 | 靠什么实现 |
+|---|---|
+| 可分 | 模块自治（P3）、契约接缝（P2）、任务范围闸（§6.4）、合并队列 |
+| 可验 | 类型贯通（P5）、四级闸（§6.5）、契约测试、对账测试 |
+| 可读 | 显式依赖（P4）、上下文预算（P11）、仓库即大脑（P9）、模块卡 |
+
+### 6.3 一次变更的一生
+
+```
+意图 → proposal（为什么、改什么、不做什么）
+     → spec（增量；验收句用 EARS 句式：当…时，系统应…）
+     → design（契约、表、事件的 diff）
+     → tasks（DAG）
+     → 并行实现
+     → 机器验证 + 独立审查
+     → 合并队列
+     → 归档，并更新常青规格
+```
+
+### 6.4 任务卡
+
+任务是代理领取的原子单位。四个字段缺一不可：
+
+```yaml
+id: T-0142
+title: 工程列表分页接口
+domain: projects
+depends_on: [T-0138]          # 契约包发布后才能开工
+scope:                        # 越界即 CI 失败
+  - modules/projects/**
+  - packages/api-client/**
+acceptance:                   # 机器据此判定「完成」
+  - modules/projects/routes.test.ts::list.paginates 通过
+  - pnpm typecheck && pnpm lint
+context:                      # 实现代理允许读的全部材料
+  - docs/charter.md
+  - docs/spec/projects.md
+  - modules/projects/module.md
+```
+
+**范围闸**：diff 超出 `scope` 声明的路径即失败，除非变更提案显式扩大范围。
+
+### 6.5 四级闸
+
+| 级别 | 内容 | 预算 | 不过的后果 |
+|---|---|---|---|
+| L0 秒级 | oxfmt 格式、oxlint、dependency-cruiser 架构规则、任务范围闸 | ≤ 10 秒 | 不能提交 |
+| L1 十秒级 | tsgo 类型检查、Vitest 单元测试 | ≤ 30 秒 | 不能提 PR |
+| L2 分钟级 | 集成测试（进程内 Postgres）、契约一致性（OpenAPI ↔ 实现 ↔ 客户端）、迁移可重放 | ≤ 5 分钟 | 不能合并 |
+| L3 发布前 | E2E（真实入口形状）、真 Postgres 复跑、性能预算、新旧对账 | 按需 | 不能发布 |
+
+### 6.6 并行调度
+
+编排者按 DAG 取「依赖已满足且 `scope` 不相交」的任务组成一个并行波次；`scope` 相交的任务串行。落地走合并队列，串行合并，冲突在队列里解决。
+
+### 6.7 三条铁律
+
+1. 没有红不修：缺陷先复现出红，再动手。
+2. 修复者不自验：审查代理必须是新鲜上下文。
+3. 绿灯只认机器输出和干净上下文跑出的结果。
+
+## 7. 与旧系统的关系
+
+### 7.1 必须兼容的外部契约
+
+这四类接口是别的机器、别的工程正在依赖的。新版必须兼容；字段级定义在 D2 从旧代码逐条提炼成契约测试。
+
+| 契约 | 对端 |
+|---|---|
+| 身份同步协议（权威与各实例之间的推送、拉取、换票） | 现有身份权威（IdP）与各实例 |
+| 事件入库协议（外部探测、监控桥向事件库推送事件） | 监控桥与探测器 |
+| 数据导入导出接口（数据工单调用各工程） | 各工程 |
+| OIDC 单点登录接入 | 各应用 |
+
+### 7.2 对账
+
+- `docs/parity/routes.csv`：旧系统 272 个路由逐行登记，状态只有三种：已实现、已退役并签收、进行中。
+- 同请求双跑：同一请求打新旧两套，比对响应。
+- 页面按真实入口形状验收：真实域名 + Origin + 真 Cookie。
+
+### 7.3 数据迁移
+
+代码不带，数据要带。一次性迁移工具把旧存储（sqlite、`.jsonl`、文件）读入新库；每个数据集按数量与校验和对账。迁移范围（全部历史，或仅活跃数据）在 D2 定。
+
+### 7.4 切换
+
+按产品面分批切换，新旧并行运行；回退就是把入口切回旧系统。切换顺序在 SWOT 接入后定（§12）。
+
+### 7.5 旧仓治理
+
+建议：重写期间旧仓只收缺陷修复和外部契约维护，新功能一律进新版。否则新版永远在追一个移动的靶。**待产品负责人拍板**（§12）。
+
+## 8. 版本管理
+
+### 8.1 从旧仓沿用的做法
+
+- 版本号只有一个来源。
+- 变更记录「新的在最上面」。
+- 文档按时间演进，禁用「最终版」命名。
+- 注释写「版本 + 日期 + 为什么」。
+
+### 8.2 新版做法
+
+| 版本 | 载体 | 规则 |
+|---|---|---|
+| 产品发布版 | git tag | SemVer；由约定式提交自动推导，不再手工 bump |
+| API 版 | 路径前缀 `/api/v1` | 破坏性变更 = 新版本号 + 迁移期；旧版本有退役日期 |
+| 数据库 schema 版 | 迁移序号 | 线性、只前进、可在空库重放 |
+| 契约包版 | `packages/api-client` 的包版本 | 随 API 契约变化发布 |
+
+- 每次发布 = tag + 自动生成的变更记录 + 迁移说明 + 可回滚的原子发布目录（§11 第 13 条）。
+- 架构级变更必记 ADR；本文档的修订也在文首状态表留痕。
+
+### 8.3 产品 VRM 框架（待接入）
+
+产品负责人将提供产品 VRM 框架文档。含义与展开以该文档为准，本任务书不预设。接入后：本节改写，使 VRM 与 §8.2 的四个版本号对齐；不兼容之处列出请产品负责人裁决。
+
+## 9. SWOT 分析（待接入）
+
+产品负责人将用其他 skill 完成 SWOT 分析并提供文档。接入位置：`docs/strategy/swot.md`，本节增补「SWOT → 决策映射表」。
+
+| 来源 | 映射到 |
+|---|---|
+| 优势 S | 明确为架构资产，写进 §3 主张予以保持 |
+| 劣势 W | 转成任务与验收项，进对应领域的规格 |
+| 机会 O | 决定切片顺序与首批范围（§2.3、§7.4） |
+| 威胁 T | 转成设计约束（§11）或对账项（§7.2） |
+
+SWOT 的结论可以修改本任务书的任何一节，修订处在本节登记。
+
+## 10. 交付物与验收
+
+### 10.1 交付物
+
+| # | 交付物 | 内容 | 前置 |
+|---|---|---|---|
+| D0 | 任务书 | 本文件 | SWOT 与 VRM 接入后定稿 |
+| D1 | 架构约定 | `AGENTS.md`、模块模板、依赖规则、四级闸流水线、可运行骨架（`pnpm dev` 一条命令起全栈） | D0 定稿 |
+| D2 | 行为规格 | 按领域分册、路由对账表、外部契约测试、数据迁移规格 | D0 定稿；可与 D1 并行 |
+| D3 | 实现 | 按切片：规格 → 实现 → 验证 → 对账 | D1 与对应领域的 D2 |
+| D4 | 迁移与切换 | 迁移工具、对账报告、切换演练与回退预案 | D3 |
+
+### 10.2 完成的定义
+
+整个重写程序完成，当且仅当：
+
+1. `docs/parity/routes.csv` 272 行全部有归宿。
+2. 新旧同请求双跑一致，或差异有书面解释并签收。
+3. 真实入口形状的 E2E 全绿。
+4. 迁移对账通过：各数据集数量与校验和一致。
+5. 任一模块满足上下文预算；`pnpm verify` 一条命令全绿。
+6. 新代理 onboarding 测试通过（10 分钟）。
+7. 性能预算达标。
+
+### 10.3 性能预算
+
+初值，D1 校准后进 CI。
+
+| 指标 | 初值 |
+|---|---|
+| API 读接口 p95 | ≤ 100 ms（内网，不含文件传输） |
+| API 写接口 p95 | ≤ 200 ms |
+| 页面首屏 LCP | ≤ 1.5 s（内网） |
+| 路由级首包 JS | ≤ 200 kB（gzip） |
+| 本地 L0 + L1 全量 | ≤ 30 s |
+
+## 11. 实弹条款
+
+以下来自旧仓踩过的坑，全部是栈无关的硬规则。细则在 D1 落成 lint 规则或 CI 检查；落不成规则的部分写进 `AGENTS.md`。
+
+| # | 条款 | 来源 |
+|---|---|---|
+| 1 | 请求路径零阻塞：同步子进程、同步文件 IO、同步 HTTP 不得出现在 `routes.ts` 与 `service.ts` 的调用链里 | 异步框架里 182 处同步调用 |
+| 2 | 失败常显：界面上的错误用行内或卡内常显提示；危险动作用自绘的两步确认，不靠浏览器原生弹窗承载业务 | 内嵌浏览器原生对话框哑弹 |
+| 3 | 证据先行：每个请求带请求 ID，日志结构化落盘；排障先读盘上证据再动手 | 分装机零日志排障黑洞 |
+| 4 | 真实入口形状验收：E2E 走真实域名 + Origin + 真 Cookie；localhost 全绿不算过 | localhost 全绿掩盖域名层故障 |
+| 5 | 端口自动探测：本机起服务先探测占用，被占自动顺延；会话结束停掉自己拉起的后台进程 | 多应用并存抢端口 |
+| 6 | 可移植路径：业务代码不出现绝对路径前缀和 OS 特定物 | 部署目标含 Linux |
+| 7 | 凭据与拓扑不入仓；服务进程以服务用户身份读写自己的配置与数据目录，不借 root 写盘 | sudo 写盘导致所有权错乱 |
+| 8 | 权限域：开发组管开发，生产组管使用；生产权限不上开发面；两面独立部署、独立库 | 已定稿的权限域模型 |
+| 9 | 身份：权威是现有 IdP；换票与吊销语义照旧 | 身份体系定稿 |
+| 10 | 文档按时间：演进记录新的在上；决策进 ADR | 散文纪律衰减 |
+| 11 | 注释写「为什么」：带版本与日期；删注释前先弄清它防什么 | 注释承载决策 |
+| 12 | 缺陷纪律：先复现出红再修；修复者不自验；绿灯只认干净上下文 | 缺陷闭环定稿 |
+| 13 | 原子发布：新目录 + 健康检查 + 一次性切换，失败整体回滚；不在运行中改目录 | 换装回滚实弹 |
+| 14 | 写者唯一：同一数据同一时刻只有一个写者，哨兵与同步类任务职责不重叠 | 两写者互踩 |
+| 15 | 不留永生线程：后台工作走队列，进程退出必须干净 | 僵尸工兵线程 |
+| 16 | 中文与标识符分层：代码标识符用 ASCII，界面中文走文案层；脚本一律 Node，不再有批处理 | 批处理编码闪退 |
+
+## 12. 待决事项
+
+| # | 事项 | 谁 | 说明 |
+|---|---|---|---|
+| 1 | SWOT 分析文档 | 产品负责人 | 接入 §9 |
+| 2 | 产品 VRM 框架文档 | 产品负责人 | 接入 §8.3 |
+| 3 | 旧仓冻结新功能 | 产品负责人 | 建议冻结（§7.5） |
+| 4 | 新仓远端 | 产品负责人 | 建一个空的 GitHub 仓并给出地址，或授权代理创建 |
+| 5 | 数据迁移范围 | D2 时定 | 全部历史，或仅活跃数据 |
+| 6 | 首批切片与切换顺序 | SWOT 接入后定 | |
+| 7 | 本机 Node 版本 | 开工前 | 现为 24.11.1，低于原生 TS 稳定线 24.12.0，需升级 |
+
+## 附录 A. 旧仓实测（2026-11-24）
+
+| 项 | 数值 |
+|---|---|
+| 服务端 | 74 个文件，21,364 行；272 个路由，分布在 23 个文件 |
+| 页面 | 44 个文件，14,413 行（含第三方资源） |
+| 本机端 | 15 个文件，6,444 行 |
+| 桌面壳 | 8 个文件，4,937 行 |
+| 工具链 | 234 个文件，35,818 行 |
+| 旧测试 | 74 个文件，12,130 行（规格代理的行为来源之一） |
+| 最大的页面 | `dev.html` 3,980 行、`devpage.html` 3,042 行、`prod.html` 1,875 行 |
+| 最大的后端文件 | `prod/app.py` 2,955 行、58 个路由 |
+| 存储 | `sqlite3.connect` 21 处；`.jsonl` 引用 47 处 |
+| 阻塞调用 | `urllib.request` 109 处；`subprocess.run` 73 处；`to_thread` 31 处 |
+| 依赖 | 服务端无依赖清单；`deploy.sh` 安装 fastapi、uvicorn、websockets 不带版本 |
+| 重复副本 | `ai-render.js` 两份相差 8 行；`marked.min.js`、`purify.min.js` 各两份且内容不同 |
+| 空目录 | `dev_server/`、`server/nexus_server/eventhub/` |
+
+## 附录 B. 联网核对来源（2026-11-24，摘要级）
+
+**语言与运行时**
+
+- [Announcing TypeScript 7.0](https://devblogs.microsoft.com/typescript/announcing-typescript-7-0)
+- [Microsoft Releases TypeScript 7.0 with a Native Go Compiler（InfoQ）](https://www.infoq.com/news/2026/08/typescript-7-released)
+- [Node.js 文档：Modules > TypeScript](https://nodejs.org/api/typescript.html)
+- [TSConfig：erasableSyntaxOnly](https://www.typescriptlang.org/tsconfig/erasableSyntaxOnly.html)
+
+**NestJS 与 TS 7**
+
+- [nest-cli issue #3479：Support TypeScript 7](https://github.com/nestjs/nest-cli/issues/3479)
+- [Does NestJS work with TypeScript 7 (tsgo)?](https://fernforge.github.io/devnotes/nestjs-typescript-7)
+- [What Breaks When You Upgrade to TypeScript 7 (tsgo)](https://medium.com/@krunalkanojiya/what-breaks-when-you-upgrade-to-typescript-7-tsgo-614005afbbd0)
+
+**后端与数据库选型**
+
+- [NestJS vs Fastify vs Hono: The 2026 Node.js Comparison（Encore）](https://encore.dev/articles/nestjs-vs-fastify-vs-hono)
+- [Hono, ElysiaJS, and What Comes After NestJS](https://oronts.com/en/guides/typescript-backends-beyond-express)
+- [Solo Dev: Stick with NestJS Clean Architecture or pivot to Hono?（r/node）](https://www.reddit.com/r/node/comments/1rf0myb/solo_dev_stick_with_nestjs_clean_architecture_or)
+- [Drizzle vs Prisma in 2026（Encore）](https://encore.dev/articles/drizzle-vs-prisma)
+- [Drizzle vs Prisma ORM in 2026: A Practical Comparison（MakerKit）](https://makerkit.dev/blog/tutorials/drizzle-vs-prisma)
+- [Bun vs Node.js in 2026 — I benchmarked both for a real project（r/node）](https://www.reddit.com/r/node/comments/1shc66k/bun_vs_nodejs_in_2026_i_benchmarked_both_for_a)
+
+**前端**
+
+- [My Frontend Stack In 2026](https://thetshaped.dev/p/my-frontend-stack-in-2026-react-nextjs-pnpm-vite-ts-tailwind-storybook-tanstack-zustand-zod-oxlint-oxfmt-msw-vitest-playright-sentry)
+- [TanStack Router：How to Integrate with shadcn/ui](https://tanstack.com/router/latest/docs/how-to/integrate-shadcn-ui)
+
+**智能体时代的仓库与流程**
+
+- [AGENTS.md（官方网站）](https://agents.md)
+- [AGENTS.md vs CLAUDE.md vs Cursor Rules: 2026 Comparison](https://blog.buildbetter.ai/agents-md-vs-cursorrules-vs-claude-skills-2026-comparison)
+- [github/spec-kit](https://github.com/github/spec-kit)
+- [Understanding Spec-Driven Development: Kiro, spec-kit（Martin Fowler）](https://martinfowler.com/articles/exploring-gen-ai/sdd-3-tools.html)
+- [A Spec-First Approach to AI-Native Engineering（Microsoft Developer Blog）](https://developer.microsoft.com/blog/spec-driven-development-ai-native-engineering)
+- [Spec-Driven Development in 2026（dev.to）](https://dev.to/krlz/spec-driven-development-in-2026-what-it-is-the-tooling-and-how-teams-actually-use-it-2fk2)
+
+**MCP**
+
+- [Model Context Protocol（Wikipedia）](https://en.wikipedia.org/wiki/Model_Context_Protocol)
+- [The 2026-07-28 Specification（MCP 官方博客）](https://blog.modelcontextprotocol.io/posts/2026-07-28)
+- [State of Model Context Protocol in Software 2026（Stacklok）](https://stacklok.com/resources/state-of-mcp-in-software-2026)
