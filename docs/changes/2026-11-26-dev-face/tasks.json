@@ -1,0 +1,102 @@
+[
+  {
+    "id": "T-0011",
+    "title": "规格：身份与会话",
+    "domain": "identity",
+    "depends_on": [],
+    "scope": ["docs/spec/identity.md"],
+    "acceptance": ["规格里每条要求都有来源和验收方式", "全文不含内部名称与真实账号名"],
+    "context": [
+      "docs/charter.md",
+      "docs/parity/SCHEMA.md",
+      "docs/parity/backlog.md",
+      "docs/parity/routes.csv",
+      "docs/parity/parts/e-data.jsonl",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0012",
+    "title": "实现：身份模块（后端）",
+    "domain": "identity",
+    "depends_on": ["T-0011"],
+    "scope": [
+      "modules/identity/**",
+      "apps/api/**",
+      "packages/api-client/**",
+      "packages/contracts/**",
+      "packages/http-kit/**",
+      "packages/db/**",
+      "docs/changes/2026-11-26-dev-face/design-01-login.md",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "acceptance": [
+      "pnpm contracts -- --check",
+      "pnpm --filter @nexus/identity test",
+      "pnpm --filter @nexus/api test:integration",
+      "pnpm verify"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/identity.md",
+      "docs/changes/2026-11-26-dev-face/design-01-login.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0003-工具链约定与质量闸.md",
+      "modules/system/module.md",
+      "modules/event-log/module.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0013",
+    "title": "实现：开发面外壳、登录页、改密（前端）",
+    "domain": "web",
+    "depends_on": ["T-0012"],
+    "scope": ["apps/web/**", "packages/ui-kit/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/web test",
+      "pnpm --filter @nexus/web typecheck",
+      "pnpm gate:l3"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/identity.md",
+      "docs/changes/2026-11-26-dev-face/design-01-login.md",
+      "docs/adr/0004-视觉语言.md",
+      "packages/api-client/openapi.json",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0014",
+    "title": "审查：第 1 片",
+    "domain": "identity",
+    "depends_on": ["T-0013"],
+    "scope": ["docs/changes/2026-11-26-dev-face/review-01-login.md"],
+    "acceptance": ["审查报告里每条结论都有复现步骤或命令输出作证"],
+    "context": [
+      "docs/spec/identity.md",
+      "docs/changes/2026-11-26-dev-face/design-01-login.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0015",
+    "title": "收口：决策记录、入口文档、任务书修订",
+    "domain": "docs",
+    "depends_on": ["T-0014"],
+    "scope": [
+      "docs/adr/**",
+      "docs/changes/2026-11-26-dev-face/**",
+      "docs/spec/**",
+      "docs/charter.md",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "acceptance": ["pnpm gate:l0"],
+    "context": ["docs/charter.md", "AGENTS.md"]
+  }
+]
