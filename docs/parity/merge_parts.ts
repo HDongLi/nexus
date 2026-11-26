@@ -377,7 +377,7 @@ function resolve(rows: Row[], problems: string[], applyDefaults: boolean): void 
   }
   const byTopic = new Map<string, Row[]>();
   for (const r of rows) {
-    if (!r.question || !isOpen(r)) continue;
+    if (!r.question) continue;
     byTopic.set(topicOf(r), [...(byTopic.get(topicOf(r)) ?? []), r]);
   }
   for (const key of Object.keys(answers)) {
@@ -385,6 +385,8 @@ function resolve(rows: Row[], problems: string[], applyDefaults: boolean): void 
   }
   for (const [key, mine] of byTopic) {
     const a = answers[key];
+    // A topic with no open route is a side remark: it only moves when answered explicitly.
+    const decided = mine.some(isOpen);
     if (a !== undefined) {
       const pick = isObj(a) ? a.pick : a;
       for (const row of mine) {
@@ -403,7 +405,7 @@ function resolve(rows: Row[], problems: string[], applyDefaults: boolean): void 
         row.destSrc = "answer";
         row.decision = q.options[pick]?.label ?? "";
       }
-    } else if (applyDefaults) {
+    } else if (applyDefaults && decided) {
       for (const row of mine) {
         const opt = row.question?.options[row.question.def];
         if (!opt || !DESTS.includes(opt.dest) || opt.dest === "unclear") {
@@ -447,9 +449,25 @@ function writeDecisions(
   path: string,
 ): void {
   const open = rows.filter(isOpen);
-  const topics = new Map<string, Row[]>();
-  for (const r of open) topics.set(topicOf(r), [...(topics.get(topicOf(r)) ?? []), r]);
-  const aside = rows.filter((r) => r.question && !isOpen(r));
+  // Every questioned route, grouped by topic. A topic is shown when at least one of its routes is open;
+  // the others are routes that follow that decision.
+  const groups = new Map<string, Row[]>();
+  for (const r of rows) if (r.question) groups.set(topicOf(r), [...(groups.get(topicOf(r)) ?? []), r]);
+  const topics = new Map([...groups].filter(([, rs]) => rs.some(isOpen)));
+  const followers = [...topics.values()].reduce((n, rs) => n + rs.length, 0) - open.length;
+  const aside = rows.filter((r) => r.question && !topics.has(topicOf(r)));
+  // The topic's lead route is the undecided one: open first, then lowest confidence, then the
+  // most fully spelled-out question.
+  const confRank = (c: string): number => CONFS.indexOf(c);
+  const lead = (rs: Row[]): Row =>
+    [...rs].sort(
+      (a, b) =>
+        Number(isOpen(b)) - Number(isOpen(a)) ||
+        Number(a.dest === "unclear") - Number(b.dest === "unclear") ||
+        confRank(a.confidence) - confRank(b.confidence) ||
+        (b.question?.q.length ?? 0) - (a.question?.q.length ?? 0) ||
+        a.rid.localeCompare(b.rid),
+    )[0] ?? rs[0];
   const answered = rows.filter((r) => r.destSrc === "answer");
   const byDefault = rows.filter((r) => r.destSrc === "default");
   const byDest = countBy(rows, (r) => r.dest);
@@ -468,7 +486,7 @@ function writeDecisions(
     })
     .join("；");
   out.push(`| 已到批次 | ${batchesIn.join("、") || "无"}（${coverage} 条） |`);
-  out.push(`| 待你裁决 | ${topics.size} 题，涉及 ${open.length} 条路由 |`);
+  out.push(`| 待你裁决 | ${topics.size} 题：判不准的 ${open.length} 条路由${followers ? `，另有跟着走的 ${followers} 条` : ""} |`);
   out.push(`| 已有答复 | ${answered.length} 条 |`);
   out.push(`| 按默认项走 | ${byDefault.length} 条 |`, "");
   out.push("## 归宿总览", "", "| 归宿 | 条数 |", "|---|---|");
@@ -494,18 +512,20 @@ function writeDecisions(
       const key = topicOf(row);
       if (shown.has(key)) continue;
       shown.add(key);
-      const q = row.question;
+      const all = groups.get(key) ?? [row];
+      const head = lead(all);
+      const q = head.question;
       if (!q) continue;
-      const all = topics.get(key) ?? [row];
       out.push(`#### ${key}${all.length > 1 ? `（影响 ${all.length} 条）` : ""}`, "");
       if (all.length > 1) {
-        for (const r of all) out.push(`- ${r.rid} ${tag(r)}：${r.summary}`);
+        for (const r of [...all].sort((x, y) => x.rid.localeCompare(y.rid))) out.push(`- ${r.rid} ${tag(r)}：${r.summary}`);
         out.push("");
-      } else out.push(`- 做什么：${row.summary}`);
-      out.push(`- 谁在用：${row.actor}`);
-      out.push(`- 证据：${row.callers}`);
-      out.push(`- 依赖：数据 ${row.stores.join("、") || "无"}；外部 ${row.external.join("、") || "无"}`);
-      out.push(`- 初判：${DEST_LABEL[row.dest]}（把握 ${row.confidence}）`);
+      }
+      out.push(`- 做什么：${head.summary}`);
+      out.push(`- 谁在用：${head.actor}`);
+      out.push(`- 证据：${head.callers}`);
+      out.push(`- 依赖：数据 ${head.stores.join("、") || "无"}；外部 ${head.external.join("、") || "无"}`);
+      out.push(`- 初判：${DEST_LABEL[head.dest]}（把握 ${head.confidence}）`);
       out.push(`- 问：${q.q}`);
       q.options.forEach((o, i) => {
         out.push(`  - ${LETTERS[i]}. ${o.label}${i === q.def ? " ← 默认" : ""}`);

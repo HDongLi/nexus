@@ -5,8 +5,8 @@
 | 日期 | 2026-11-26 |
 | 来源 | `merge_parts.ts` 生成，不要手改。答复登记进 `answers.json` 后重新生成 |
 | 怎么答 | 一行一题：`R042 a`。不答的按默认项走（任务书 §6.8） |
-| 已到批次 | a-prod、b-core、c-platform、d-devflow、e-data、f-identity（服务端 229 / 272；本机端 0 / 74 条） |
-| 待你裁决 | 14 题，涉及 20 条路由 |
+| 已到批次 | a-prod、b-core、c-platform、d-devflow、e-data、f-identity（服务端 272 / 272；本机端 0 / 74 条） |
+| 待你裁决 | 18 题：判不准的 24 条路由，另有跟着走的 8 条 |
 | 已有答复 | 0 条 |
 | 按默认项走 | 0 条 |
 
@@ -14,16 +14,16 @@
 
 | 归宿 | 条数 |
 |---|---|
-| 进内核（kernel） | 118 |
+| 进内核（kernel） | 137 |
 | 进定制包（m） | 30 |
 | 作为工具重建（tool） | 0 |
-| 退役（retire） | 68 |
-| 判不准（unclear） | 13 |
+| 退役（retire） | 91 |
+| 判不准（unclear） | 14 |
 
 | 批次 | 进内核 | 定制包 | 工具 | 退役 | 判不准 | 未到 |
 |---|---|---|---|---|---|---|
 | a-prod | 17 | 12 | 0 | 22 | 7 | 0 |
-| b-core | 7 | 0 | 0 | 0 | 0 | 43 |
+| b-core | 26 | 0 | 0 | 23 | 1 | 0 |
 | c-platform | 14 | 4 | 0 | 17 | 3 | 0 |
 | d-devflow | 26 | 8 | 0 | 6 | 0 | 0 |
 | e-data | 31 | 2 | 0 | 15 | 3 | 0 |
@@ -42,6 +42,7 @@
 - R214 POST /api/my/feedback/{fid}/like：给意见点赞或取消（同人幂等切换）
 - R215 POST /api/my/feedback/{fid}/reply：用户追加留言；追问、完结或驳回态自动重开
 
+- 做什么：意见反馈页：按工程提 bug/想法/咨询并看处理进度
 - 谁在用：用户页面
 - 证据：server/web/shell.html:418（壳栏「意见」钮）；server/web/dev.html:1373（dev 页「许愿」钮跳目标机 /feedback）；client/web/settings.html:262-269；tools/ops/nginx/nexus-443.platform.template:37；docstring 称 nginx 注入各应用页的 💬 钮落此页
 - 依赖：数据 server/web/feedback.html、nexus-server.json（users，校验会话）；外部 无
@@ -78,6 +79,69 @@
   - c. 退役：不再需要应用向平台投递
 - 默认项的依据：起因是 certm 生产应用上报恒 404 的实弹缺陷（BUG-2026-10-28-31），说明确有应用侧需求；仓内无生产方代码，拉取方在 dev/app_messages.py
 
+### b-core
+
+#### R230
+
+- 做什么：签发某张卡的批红链接令牌：7 天有效、仅限该卡、持链即可批
+- 谁在用：无人
+- 证据：无调用方证据：奏折页 server/web/eventhub/memorial.html:37 渲染了「链接」按钮，但全仓没有它的点击处理（git 历史里也从未有过）；仅测试 server/tests/test_cybercore_m6.py:180 调用
+- 依赖：数据 events.db:decisions（查卡是否存在）、nexus-server.json:identity_push_key（令牌签名源）；外部 无
+- 初判：退役（把握 low）
+- 问：卡片链接式批红（发一条链接、持链即可批、7 天、单卡）新版还要吗？
+  - a. 退役：现状从未可用，新版不做链接批红 ← 默认
+  - b. 进内核：重建为消息里的审批链接，补记批红人与防重放
+- 默认项的依据：奏折页的链接按钮没有点击处理（memorial.html:37，git 历史检索无命中）；签发与表单两端点只有测试调用；持链即可批而不记是谁批的，和批红要留痕相冲
+
+#### case-admin（影响 6 条）
+
+- R237 POST /api/cases/{cid}/link：把两卷轻关联：双向各记一条理由与记名人，不动文书不动态
+- R238 DELETE /api/cases/{cid}/link：解除两卷的轻关联，双向各删一条
+- R240 POST /api/cases/{cid}/reopen：重开已结的卷：回开放态并给新死线，仅超管
+- R241 POST /api/cases/{cid}/close：宣告结案：把开放或在办的卷置为已办结，仅超管
+- R242 POST /api/events/{eid}/case：把一条事件移到别的卷（归档纠错），判定栏追记人工移卷，仅超管
+- R243 POST /api/letters/{lid}/case：把一封信移到别的卷（归档纠错），仅超管
+
+- 做什么：宣告结案：把开放或在办的卷置为已办结，仅超管
+- 谁在用：无人
+- 证据：无调用方证据：没有页面、工具或 HTTP 级测试调用；卡面动作词表里有结案一项，但没有任何制卡的地方用它；设计稿 docs/控制芯核-M9信件案卷设计.md:306 列了
+- 依赖：数据 events.db:cases；外部 无
+- 初判：退役（把握 low）
+- 问：案卷的人工管理命令（关联、解除、重开、结案、移卷，共 6 条：R237 R238 R240 R241 R242 R243）新版保留吗？
+  - a. 退役：重开与并卷已能靠批红卡片完成，其余等有需要再加 ← 默认
+  - b. 进内核：做成完整的案卷管理命令，并配上页面
+- 默认项的依据：6 条都没有页面、工具或 HTTP 级测试调用（设计稿 docs/控制芯核-M9信件案卷设计.md:304-307 列了）；超管位的注入方 dev 面代理 2026-11-07 改为 307（observer_routes.py:53-60），门户代理不转身份头（observer.py:55-65）；文献库页 templar.html 只有浏览
+
+#### R246
+
+- 做什么：投信入口：验机间票，按七类信词表收信并归卷（信必归卷）
+- 谁在用：无人
+- 证据：无调用方证据：全仓没有向 /api/letters 发信的代码或工具；仅测试 server/tests/test_cybercore_m9.py:245-254。生产中的信都来自回执入口 R229，信类一栏留空
+- 依赖：数据 events.db:letters、events.db:cases（归卷判定，可能开卷）、events.db:decisions（信里带结构化块时）、rules.json、nexus-server.json:identity_push_key（验票）；外部 无
+- 初判：退役（把握 low）
+- 问：带信类别的投信入口（请示、指令、提问、意见、汇报、承诺、宣告七类）新版要吗？
+  - a. 退役：会话来信由回执入口承接，不带信类 ← 默认
+  - b. 进内核：给智能体和人一个带信类的投信接口
+- 默认项的依据：全仓没有发送方，只有测试调用；回执入口已经在落信（receipt.py:105-111）；设计稿说的母舰信没有页面（docs/控制芯核-M9信件案卷设计.md:309）
+
+#### observer-login（影响 4 条）
+
+- R264 GET /observer/login：出探测器登录页（独立口令登录的静态页）
+- R265 POST /observer/api/login：探测器独立口令登录：只认本机配置的单账号，带锁定、留痕，发 30 天会话
+- R266 GET /observer/api/whoami：回当前会话的用户名与服务端版本
+- R267 POST /observer/api/logout：退出登录：让会话 cookie 过期，重复调用无害
+
+- 做什么：探测器独立口令登录：只认本机配置的单账号，带锁定、留痕，发 30 天会话
+- 谁在用：用户页面
+- 证据：server/web/eventhub/observer_login.html:36；测试 test_cybercore_m4.py:304-311,351,389
+- 依赖：数据 nexus-server.json:observer_auth（单账号的用户名、盐、哈希）与 login_lockout 开关、logs/login-log.jsonl（登录留痕，成功与失败都追加）、进程内失败计数表（锁定判定）；外部 无
+- 初判：判不准（把握 low）
+- 问：探测器（事件库页面的入口）的登录，新版用哪种凭据？
+  - a. 退役独立口令面：并入统一登录，「仅超管可见」改成权限规则 ← 默认
+  - b. 进内核：做成通用的「敏感面独立管理凭据」，任何单位可给某块面单设口令
+  - c. 进定制包：独立口令面只作为这家单位的安全安排保留
+- 默认项的依据：任务书 §4.1 的认证基线是会话 Cookie 加 OIDC、身份权威沿用现有 IdP，没有写例外；现行独立面的动机（身份推送链路被投毒）是这套多机部署特有的（observer.py:8-13 模块注）；test_cybercore_m4.py:278-315 断言别的开发者进不来
+
 ### c-platform
 
 #### dsh（影响 3 条）
@@ -86,15 +150,16 @@
 - R047 GET,POST,PUT,DELETE,PATCH,HEAD,OPTIONS /dsh/{path:path}：DSH HTTP 透传：剥前缀、穿 cookie、回带换票头与缓存头
 - R048 WEBSOCKET /dsh/api/remote.mux：DSH 的 WebSocket 中继：握手前验票，双向泵消息
 
+- 做什么：DSH HTTP 透传：剥前缀、穿 cookie、回带换票头与缓存头
 - 谁在用：用户页面
-- 证据：server/web/dev.html:1834（openDsh 设 iframe 地址）、server/web/devpage.html:2381,2420（DSH 浮层与右栏面板）；测试 server/tests/test_dsh_routes.py；客户端代理段已删只剩注释（client/nexus_client/main.py:1214）
-- 依赖：数据 ~/.dsh-users/registry.json（用户到实例端口，只读，30 秒缓存）；外部 journalctl -u nexus-dsh（或 nexus-dsh@用户）子进程，取启动令牌，30 秒缓存
+- 证据：server/web/dev.html:1834 与 server/web/devpage.html:2381,2420 打开的 iframe 内，DSH 单页应用对 /dsh/* 的全部请求；测试 server/tests/test_dsh_routes.py；客户端代理段已删只剩注释（client/nexus_client/main.py:1214）
+- 依赖：数据 ~/.dsh-users/registry.json（按人选实例端口，30 秒缓存）；外部 DSH web 上游 127.0.0.1:3080 或每用户实例端口（HTTP；事件流走流式转发，超时 6 小时）
 - 初判：判不准（把握 low）
-- 问：（与 R047 同一裁决）DSH 的入口跳转要不要进新版？
-  - a. 进定制包：DSH 是这家单位选用的具体工具，入口补票作为定制模块保留 ← 默认
-  - b. 进内核：随「内嵌第三方 Web 工具」的通用代理能力一起进
-  - c. 退役：新版不再内嵌 DSH
-- 默认项的依据：同 R047：现役入口 dev.html:1834、devpage.html:2381 与 2420；docs/借用登记.md 记 DSH 为换装第二候选、未转正；路由写死用户目录 与单元名 nexus-dsh
+- 问：DSH（DeepSeek Harness，第三方 AI 会话交互层，试点中）的同源代理三件（R046、R047、R048）要不要进新版？
+  - a. 进定制包：DSH 是这家单位选用的具体工具，代理与每人实例路由作为定制模块保留 ← 默认
+  - b. 进内核：把「同源代理加 WebSocket 与 SSE 中继」提炼成内嵌第三方 Web 工具的通用能力
+  - c. 退役：新版 AI 接入走 MCP 与自建会话层，不再内嵌 DSH
+- 默认项的依据：现役入口 dev.html:1834、devpage.html:2381 与 2420；docs/借用登记.md 记 DSH 为换装第二候选、OpenHands Agent Canvas 为第一候选，单元「转正时」才入套件；devpage.html:554 留着「切回旧版」回退车道；路由写死用户目录、nexus-dsh、3080
 
 #### R079
 
