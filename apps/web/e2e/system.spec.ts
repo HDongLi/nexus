@@ -19,9 +19,9 @@ test("首页把后端的健康状态显示出来", async ({ page }) => {
   await page.goto("/");
 
   const cells = page.getByRole("region", { name: "健康状态" }).locator("dd");
-  await expect(cells.nth(0)).toHaveText("ok", { timeout: 15_000 });
+  await expect(cells.nth(0)).toHaveText("正常", { timeout: 15_000 });
   await expect(cells.nth(1)).toHaveText(/^\d+\.\d+\.\d+/);
-  await expect(cells.nth(2)).toHaveText("ok");
+  await expect(cells.nth(2)).toHaveText("正常");
 
   expect(mistakes).toEqual([]);
 });

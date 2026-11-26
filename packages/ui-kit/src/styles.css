@@ -1,7 +1,14 @@
 /*
- * 设计系统的底座（2026-11-26 随骨架建立）。
- * 令牌沿用 shadcn 的命名与明暗两套取值，组件写法也照 shadcn，命令行工具以后能直接往里加组件。
- * 视觉是占位的：真正的外观等第一批评审过的页面出来再定，到时只改这里的令牌。
+ * 设计系统的底座。想改外观，只改这个文件，不改页面。
+ *
+ * 取值的来历（2026-11-26 实测 Kimi、DeepSeek 对话页、DeepSeek Harness、Claude 四家的公开页面与
+ * 安装包，细目见 docs/adr/0004-视觉语言.md）：
+ * - 字体一律系统字体，不加载网络字体。内网里没有字体可下，加载了也会先闪一下。
+ * - 字号与行高成对写死，整套界面只用下面这几对。
+ * - 文字是「墨」分四级，边框和悬停底色是墨加透明度，不是另调的灰色。
+ * - 「浮起」靠一根半像素的细描边加两层极淡的大范围柔影，不靠一块明显的阴影。
+ * 令牌名沿用 shadcn 的那一套（background、foreground、primary、muted、border……），
+ * 这样它的命令行工具以后往里加组件时不用改色；shadcn 没有的概念另起名字（surface、ink-2…4、fill）。
  */
 @import "tailwindcss";
 
@@ -10,82 +17,197 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme {
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono:
+    "SF Mono", "JetBrains Mono", "Fira Code", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+
+  /* 字阶。页面里只用这四个名字，不自己写 13px、15px 这类零头。 */
+  --text-caption: 0.75rem; /* 12 / 18：时间、请求号、页脚 */
+  --text-caption--line-height: 1.125rem;
+  --text-ui: 0.875rem; /* 14 / 22：界面文字的默认值，表格、表单、导航 */
+  --text-ui--line-height: 1.375rem;
+  --text-body: 1rem; /* 16 / 26：读的内容，对话、说明正文 */
+  --text-body--line-height: 1.625rem;
+  --text-title: 1.375rem; /* 22 / 32：页面标题 */
+  --text-title--line-height: 2rem;
+
+  /* 圆角。控件、卡片、浮面各一档，其余用全圆（胶囊、头像）。 */
+  --radius-control: 10px;
+  --radius-card: 12px;
+  --radius-panel: 16px;
+
+  /* 版心。读的内容不超过 800，表格类页面可以放宽到 1120。 */
+  --container-read: 50rem;
+  --container-wide: 70rem;
+}
+
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  color-scheme: light;
+
+  --background: #ffffff;
+  /* 侧栏、页面外围的底。比主区暗一点点，靠这一步把两个面分开，不画重线。 */
+  --surface: #f9fafb;
+  /* 墨的四级：正文、说明、标签、占位。白底上的对比度依次是 18.9、5.8、3.7、2.1，
+     所以后两级不写要读的句子：三级只写标签和辅助信息，四级只做占位。 */
+  --foreground: #0f1115;
+  --ink-2: #61666b;
+  --ink-3: #81858c;
+  --ink-4: #adb2b8;
+
+  --card: #ffffff;
+  --card-foreground: #0f1115;
+  --popover: #ffffff;
+  --popover-foreground: #0f1115;
+
+  /* 强调色只有一个，只用在主按钮、当前项、焦点环、链接上。 */
+  --primary: #2b59c3;
+  --primary-foreground: #ffffff;
+  --brand-soft: rgba(43, 89, 195, 0.09);
+
+  --secondary: #f0f2f5;
+  --secondary-foreground: #0f1115;
+  --muted: #f9fafb;
+  --muted-foreground: #61666b;
+  /* 悬停与按下的底色：墨加透明度。 */
+  --accent: rgba(15, 17, 21, 0.05);
+  --accent-foreground: #0f1115;
+  --fill: rgba(15, 17, 21, 0.04);
+  --fill-strong: rgba(15, 17, 21, 0.08);
+
+  --destructive: #c2372f;
+  --success: #0f7b52;
+  --warning: #9a5b00;
+
+  /* 边框是墨加透明度，分轻重两档；输入框的边比装饰线重一点。 */
+  --border: rgba(15, 17, 21, 0.09);
+  --border-strong: rgba(15, 17, 21, 0.16);
+  --input: rgba(15, 17, 21, 0.14);
+  --ring: rgba(43, 89, 195, 0.5);
+
+  /* 层次：细描边（半像素的一圈）加两层柔影，透明度都在 5% 以内。 */
+  --hairline: rgba(15, 17, 21, 0.07);
+  --elevation-soft:
+    0 0 0 0.5px var(--hairline), 0 4px 16px rgba(15, 17, 21, 0.03), 0 0 24px rgba(15, 17, 21, 0.03);
+  --elevation-panel:
+    0 0 0 0.5px var(--hairline), 0 3px 8px rgba(15, 17, 21, 0.03), 0 0 16px rgba(15, 17, 21, 0.02);
+  --elevation-prominent:
+    0 0 0 0.5px var(--hairline), 0 3px 8px rgba(15, 17, 21, 0.04), 0 0 20px rgba(15, 17, 21, 0.05);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  color-scheme: dark;
+
+  --background: #151517;
+  --surface: #0f1115;
+  --foreground: #f9fafb;
+  --ink-2: #cfd3d6;
+  --ink-3: #adb2b8;
+  --ink-4: #81858c;
+
+  --card: #232324;
+  --card-foreground: #f9fafb;
+  --popover: #2c2c2e;
+  --popover-foreground: #f9fafb;
+
+  /* 深色下强调色反过来：浅蓝配深字。 */
+  --primary: #9db8ff;
+  --primary-foreground: #0f1115;
+  --brand-soft: rgba(157, 184, 255, 0.13);
+
+  --secondary: #2c2c2e;
+  --secondary-foreground: #f9fafb;
+  --muted: #1c1c1f;
+  --muted-foreground: #adb2b8;
+  --accent: rgba(255, 255, 255, 0.07);
+  --accent-foreground: #f9fafb;
+  --fill: rgba(255, 255, 255, 0.05);
+  --fill-strong: rgba(255, 255, 255, 0.1);
+
+  --destructive: #f28b82;
+  --success: #57c98a;
+  --warning: #f0b357;
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --input: rgba(255, 255, 255, 0.14);
+  --ring: rgba(157, 184, 255, 0.55);
+
+  --hairline: rgba(255, 255, 255, 0.08);
+  --elevation-soft:
+    0 0 0 0.5px var(--hairline), 0 4px 16px rgba(0, 0, 0, 0.2), 0 0 24px rgba(0, 0, 0, 0.16);
+  --elevation-panel:
+    0 0 0 0.5px var(--hairline), 0 3px 8px rgba(0, 0, 0, 0.2), 0 0 16px rgba(0, 0, 0, 0.14);
+  --elevation-prominent:
+    0 0 0 0.5px var(--hairline), 0 3px 8px rgba(0, 0, 0, 0.26), 0 0 20px rgba(0, 0, 0, 0.3);
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
   --color-foreground: var(--foreground);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-brand-soft: var(--brand-soft);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-fill: var(--fill);
+  --color-fill-strong: var(--fill-strong);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-soft: var(--elevation-soft);
+  --shadow-panel: var(--elevation-panel);
+  --shadow-prominent: var(--elevation-prominent);
 }
 
 @layer base {
   * {
     border-color: var(--color-border);
-    outline-color: color-mix(in oklch, var(--color-ring) 50%, transparent);
+    /* 细而淡的滚动条。原生那根在深浅两套配色里都很跳。 */
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  html {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    font-variant-emoji: text;
   }
 
   body {
     background-color: var(--color-background);
     color: var(--color-foreground);
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+  }
+
+  ::selection {
+    background: var(--brand-soft);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

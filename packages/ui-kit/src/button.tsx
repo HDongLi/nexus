@@ -2,22 +2,28 @@ import { cva, type VariantProps } from "class-variance-authority";
 import type { ButtonHTMLAttributes } from "react";
 import { cn } from "./cn.ts";
 
+/**
+ * 按钮。六个变体沿用的是 shadcn 的名字，它的命令行工具生成的组件拿来就能用。
+ * 视觉规则（决策记录 0004）：只有主按钮有颜色，其余全是平的；不用阴影，靠一像素的边和悬停底色区分。
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+  "inline-flex shrink-0 items-center justify-center gap-2 rounded-control text-ui font-medium whitespace-nowrap transition-colors duration-150 outline-none select-none disabled:pointer-events-none disabled:opacity-45 focus-visible:ring-2 focus-visible:ring-ring/50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        default: "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
-        secondary: "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
-        outline: "border bg-background shadow-xs hover:bg-accent hover:text-accent-foreground",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        destructive: "bg-destructive text-white shadow-xs hover:bg-destructive/90",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        secondary: "border border-border-strong bg-card text-card-foreground hover:bg-fill",
+        outline: "border border-border-strong bg-transparent text-foreground hover:bg-fill",
+        ghost: "text-foreground hover:bg-fill hover:text-foreground",
+        destructive: "bg-destructive text-white hover:bg-destructive/90",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 rounded-md px-3 text-xs",
-        lg: "h-10 rounded-md px-6",
-        icon: "size-9",
+        default: "h-9 px-4",
+        sm: "h-8 gap-1.5 px-3",
+        lg: "h-10 px-5 text-body",
+        icon: "size-8",
+        "icon-sm": "size-7",
       },
     },
     defaultVariants: {

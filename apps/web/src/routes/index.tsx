@@ -1,10 +1,23 @@
 import { type ApiFailure, type CallResult, failureOf } from "@nexus/api-client";
+import {
+  Button,
+  DescriptionDetail,
+  DescriptionList,
+  DescriptionTerm,
+  InlineCode,
+  Notice,
+  PageBody,
+  PageHeader,
+  Panel,
+  StatusBadge,
+  type StatusTone,
+} from "@nexus/ui-kit";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { Notice } from "@nexus/ui-kit";
-import { useEffect, useState } from "react";
+import { Activity, Info, RefreshCw } from "lucide-react";
 import { api } from "../lib/api.ts";
 import { explainFailure } from "../lib/failure.ts";
+import { formatLocalTime } from "../lib/time.ts";
 
 export const Route = createFileRoute("/")({
   component: SystemPage,
@@ -23,81 +36,111 @@ function useEndpoint<T>(key: string[], call: () => Promise<CallResult & { data?:
   });
 }
 
-function SystemPage() {
-  const health = useEndpoint(["system", "health"], () => api.GET("/api/v1/system/health"));
-  const info = useEndpoint(["system", "info"], () => api.GET("/api/v1/system/info"));
-  const now = useClock();
+const HEALTH_TEXT: Record<"ok" | "degraded", [StatusTone, string]> = {
+  ok: ["ok", "正常"],
+  degraded: ["fail", "降级"],
+};
 
+const CHECK_TEXT: Record<"ok" | "fail", [StatusTone, string]> = {
+  ok: ["ok", "正常"],
+  fail: ["fail", "故障"],
+};
+
+/** 给人看的时间用本地时区，鼠标悬停时给完整的标准格式，方便对日志。 */
+function Moment({ value }: { value: string }) {
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">nexus</h1>
-        <p className="text-muted-foreground">
-          这是骨架的第一页：证明从页面到数据库的整条链路是通的。
-        </p>
-      </header>
-
-      <section className="space-y-3" aria-label="健康状态">
-        <h2 className="text-lg font-medium">健康状态</h2>
-        {health.data?.ok ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">状态</dt>
-            <dd>
-              <span
-                className={health.data.data.status === "ok" ? "text-emerald-700" : "text-red-700"}
-              >
-                {health.data.data.status}
-              </span>
-            </dd>
-            <dt className="text-muted-foreground">版本</dt>
-            <dd className="font-mono">{health.data.data.version}</dd>
-            <dt className="text-muted-foreground">数据库</dt>
-            <dd>{health.data.data.checks.db}</dd>
-            <dt className="text-muted-foreground">服务器时间</dt>
-            <dd className="font-mono">{health.data.data.time}</dd>
-          </dl>
-        ) : null}
-        {health.data && !health.data.ok ? (
-          <Notice tone="error" title="连不上后端" requestId={health.data.failure.requestId}>
-            {explainFailure(health.data.failure).detail}
-          </Notice>
-        ) : null}
-        {health.isPending ? <p className="text-sm text-muted-foreground">正在问后端……</p> : null}
-      </section>
-
-      <section className="space-y-3" aria-label="启动信息">
-        <h2 className="text-lg font-medium">启动信息</h2>
-        {info.data?.ok ? (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1 text-sm">
-            <dt className="text-muted-foreground">本次启动</dt>
-            <dd className="font-mono">{info.data.data.boot.startedAt}</dd>
-            <dt className="text-muted-foreground">启动编号</dt>
-            <dd className="font-mono">{info.data.data.boot.bootId}</dd>
-            <dt className="text-muted-foreground">最近启动</dt>
-            <dd>{info.data.data.recentBoots.length} 次</dd>
-          </dl>
-        ) : null}
-        {info.data && !info.data.ok ? (
-          <Notice
-            tone="error"
-            title={explainFailure(info.data.failure).title}
-            requestId={info.data.failure.requestId}
-          >
-            {explainFailure(info.data.failure).detail}
-          </Notice>
-        ) : null}
-      </section>
-
-      <footer className="text-xs text-muted-foreground">浏览器时间 {now}</footer>
-    </div>
+    <time dateTime={value} title={value} className="font-mono tabular-nums">
+      {formatLocalTime(value)}
+    </time>
   );
 }
 
-function useClock(): string {
-  const [now, setNow] = useState(() => new Date().toISOString());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date().toISOString()), 1000);
-    return () => clearInterval(timer);
-  }, []);
-  return now;
+function SystemPage() {
+  const health = useEndpoint(["system", "health"], () => api.GET("/api/v1/system/health"));
+  const info = useEndpoint(["system", "info"], () => api.GET("/api/v1/system/info"));
+
+  const refresh = (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="刷新"
+      onClick={() => {
+        void health.refetch();
+        void info.refetch();
+      }}
+    >
+      <RefreshCw />
+    </Button>
+  );
+
+  return (
+    <>
+      <PageHeader
+        title="系统状态"
+        description="后端在不在、是哪个版本、什么时候起的"
+        actions={refresh}
+      />
+      <PageBody>
+        <Panel title="健康状态" icon={<Activity />} aria-label="健康状态">
+          {health.data?.ok ? (
+            <DescriptionList>
+              <DescriptionTerm>状态</DescriptionTerm>
+              <DescriptionDetail>
+                <StatusBadge tone={HEALTH_TEXT[health.data.data.status][0]}>
+                  {HEALTH_TEXT[health.data.data.status][1]}
+                </StatusBadge>
+              </DescriptionDetail>
+              <DescriptionTerm>版本</DescriptionTerm>
+              <DescriptionDetail>
+                <InlineCode>{health.data.data.version}</InlineCode>
+              </DescriptionDetail>
+              <DescriptionTerm>数据库</DescriptionTerm>
+              <DescriptionDetail>
+                <StatusBadge tone={CHECK_TEXT[health.data.data.checks.db][0]}>
+                  {CHECK_TEXT[health.data.data.checks.db][1]}
+                </StatusBadge>
+              </DescriptionDetail>
+              <DescriptionTerm>服务器时间</DescriptionTerm>
+              <DescriptionDetail>
+                <Moment value={health.data.data.time} />
+              </DescriptionDetail>
+            </DescriptionList>
+          ) : null}
+          {health.data && !health.data.ok ? (
+            <Notice tone="error" title="连不上后端" requestId={health.data.failure.requestId}>
+              {explainFailure(health.data.failure).detail}
+            </Notice>
+          ) : null}
+          {health.isPending ? <p className="text-ink-2">正在问后端……</p> : null}
+        </Panel>
+
+        <Panel title="启动信息" icon={<Info />} aria-label="启动信息">
+          {info.data?.ok ? (
+            <DescriptionList>
+              <DescriptionTerm>本次启动</DescriptionTerm>
+              <DescriptionDetail>
+                <Moment value={info.data.data.boot.startedAt} />
+              </DescriptionDetail>
+              <DescriptionTerm>启动编号</DescriptionTerm>
+              <DescriptionDetail>
+                <InlineCode>{info.data.data.boot.bootId}</InlineCode>
+              </DescriptionDetail>
+              <DescriptionTerm>最近启动</DescriptionTerm>
+              <DescriptionDetail>{info.data.data.recentBoots.length} 次</DescriptionDetail>
+            </DescriptionList>
+          ) : null}
+          {info.data && !info.data.ok ? (
+            <Notice
+              tone="error"
+              title={explainFailure(info.data.failure).title}
+              requestId={info.data.failure.requestId}
+            >
+              {explainFailure(info.data.failure).detail}
+            </Notice>
+          ) : null}
+          {info.isPending ? <p className="text-ink-2">正在问后端……</p> : null}
+        </Panel>
+      </PageBody>
+    </>
+  );
 }

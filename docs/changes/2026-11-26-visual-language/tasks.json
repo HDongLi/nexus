@@ -1,0 +1,20 @@
+[
+  {
+    "id": "T-0010",
+    "title": "视觉语言底座：取值、通用组合件、骨架页重搭",
+    "domain": "web",
+    "depends_on": ["T-0006", "T-0009"],
+    "scope": [
+      "packages/ui-kit/**",
+      "apps/web/src/**",
+      "apps/web/e2e/**",
+      "apps/web/package.json",
+      "docs/adr/0004-视觉语言.md",
+      "docs/adr/0001-技术栈版本复核.md",
+      "docs/changes/2026-11-26-visual-language/**",
+      "AGENTS.md"
+    ],
+    "acceptance": ["pnpm verify", "pnpm gate:l3", "node tools/gates/scope.ts --task T-0010"],
+    "context": ["docs/charter.md", "docs/adr/0004-视觉语言.md", "packages/ui-kit/src/styles.css"]
+  }
+]
