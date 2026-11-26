@@ -1,0 +1,29 @@
+import { API_PREFIX, errors, json, route } from "@nexus/http-kit";
+import { z } from "zod";
+
+/**
+ * 这个模块的路由声明。只有形状，没有行为：生成契约文档时只读这一个文件，不起数据库。
+ *
+ * 访问级别没有默认值，每条都要写。新接口先按 `user`（要登录）起步，确实谁都能看的才改成
+ * `public`：忘了改的后果是多要一次登录，而不是把数据摆在门外。
+ */
+
+export const pingSchema = z.object({
+  name: z.string().min(1),
+  at: z.iso.datetime(),
+});
+
+export const pingRoute = route("user", {
+  method: "get",
+  path: `${API_PREFIX}/{{name}}/ping`,
+  operationId: "get{{Name}}Ping",
+  summary: "示例接口：证明这个模块已经接进应用",
+  tags: ["{{name}}"],
+  responses: {
+    200: json(pingSchema, "模块在"),
+    ...errors(401, 403, 500),
+  },
+});
+
+/** 契约文档需要的全部内容。 */
+export const {{camel}}Contract = { name: "{{name}}", routes: [pingRoute] } as const;

@@ -1,0 +1,14 @@
+{
+  "name": "@nexus/config",
+  "version": "0.0.0",
+  "private": true,
+  "description": "全仓共用的工程配置：tsconfig 基线、lint 与格式化规则、依赖方向规则",
+  "files": [
+    "tsconfig.base.json",
+    "tsconfig.node.json",
+    "tsconfig.web.json",
+    "oxlint.json",
+    "dependency-cruiser.mjs"
+  ],
+  "type": "module"
+}

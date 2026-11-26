@@ -1,0 +1,24 @@
+import { bind, type AnyRouteBinding } from "@nexus/http-kit";
+import { {{camel}}Contract, pingRoute } from "./routes.ts";
+import { create{{Name}}Service, type {{Name}}Deps, type {{Name}}Service } from "./service.ts";
+
+/** 模块交给应用挂载的东西：绑好处理函数的路由，加用例。 */
+export interface {{Name}}Module {
+  bindings: readonly AnyRouteBinding[];
+  service: {{Name}}Service;
+}
+
+/**
+ * 本模块唯一出口（任务书 §5.3）。别的模块和应用只准 import 这一个文件，
+ * 依赖方向检查会拦下伸进来的手。处理函数只做三件事：解析入参、调用用例、把结果交回去。
+ */
+export function create{{Name}}Module(deps: {{Name}}Deps): {{Name}}Module {
+  const service = create{{Name}}Service(deps);
+  return {
+    service,
+    bindings: [bind(pingRoute, async (c) => c.json(await service.ping(), 200))],
+  };
+}
+
+export { {{camel}}Contract };
+export type { {{Name}}Deps, {{Name}}Service };

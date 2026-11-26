@@ -1,0 +1,17 @@
+{
+  "printWidth": 100,
+  "tabWidth": 2,
+  "quoteStyle": "single",
+  "semicolon": "always",
+  "trailingComma": "all",
+  "ignorePatterns": [
+    "docs/strategy",
+    "**/dist",
+    "**/node_modules",
+    "**/routeTree.gen.ts",
+    "packages/api-client/openapi.json",
+    "packages/api-client/src/schema.d.ts",
+    "**/*.md",
+    "pnpm-lock.yaml"
+  ]
+}

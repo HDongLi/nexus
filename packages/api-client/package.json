@@ -1,0 +1,24 @@
+{
+  "name": "@nexus/api-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "前后端唯一共享物：由 OpenAPI 文档生成的类型，加一个类型安全的请求客户端",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "generate": "openapi-typescript openapi.json -o src/schema.d.ts",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.17.0"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.9.3",
+    "vitest": "5.1.1"
+  }
+}

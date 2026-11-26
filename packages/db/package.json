@@ -1,0 +1,19 @@
+{
+  "name": "@nexus/db",
+  "version": "0.0.0",
+  "private": true,
+  "description": "数据库接入：两种驱动（进程内 PGlite、真 Postgres）、迁移执行、共享的 Db 类型。不含任何表和业务",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.6.0",
+    "drizzle-orm": "^0.45.4",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1"
+  }
+}

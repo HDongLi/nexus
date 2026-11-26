@@ -1,0 +1,5 @@
+{
+  "extends": "@nexus/config/tsconfig.node.json",
+  "include": ["tools/**/*.ts", "docs/parity/**/*.ts"],
+  "exclude": ["node_modules"]
+}

@@ -1,0 +1,33 @@
+{
+  "categories": {
+    "correctness": "error"
+  },
+  "rules": {
+    "max-lines": [
+      "error",
+      {
+        "max": 400
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["**/service.ts"],
+      "rules": {
+        "max-lines": [
+          "error",
+          {
+            "max": 300
+          }
+        ]
+      }
+    },
+    {
+      "files": ["tools/**", "**/*.test.ts", "**/*.test.tsx"],
+      "rules": {
+        "no-console": "off"
+      }
+    }
+  ],
+  "ignorePatterns": ["**/dist", "**/node_modules", "**/.turbo", "**/routeTree.gen.ts", "docs/**"]
+}

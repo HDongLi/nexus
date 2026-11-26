@@ -1,0 +1,24 @@
+{
+  "name": "@nexus/event-log",
+  "version": "0.0.0",
+  "private": true,
+  "description": "事件日志：全平台事件的唯一落点。别的模块只准经它的公开接口写事件、读事件",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@nexus/contracts": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "5.1.1"
+  }
+}

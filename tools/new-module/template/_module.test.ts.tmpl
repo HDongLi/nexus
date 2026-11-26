@@ -1,0 +1,16 @@
+import { describe, expect, it } from "vitest";
+import { create{{Name}}Module } from "./index.ts";
+
+const FIXED = new Date("2026-11-26T06:00:00.000Z");
+
+describe("{{name}} 模块", () => {
+  it("示例用例回得出东西，时间取自传进来的时钟", async () => {
+    const { service } = create{{Name}}Module({ now: () => FIXED });
+    expect(await service.ping()).toEqual({ name: "{{name}}", at: FIXED.toISOString() });
+  });
+
+  it("每条路由都写了访问级别", () => {
+    const { bindings } = create{{Name}}Module({});
+    expect(bindings.map((binding) => binding.access)).toEqual(["user"]);
+  });
+});

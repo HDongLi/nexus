@@ -1,0 +1,35 @@
+{
+  "name": "@nexus/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "后端应用：组合根、中间件、进程生命周期。不含业务",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch --env-file-if-exists=.env src/main.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "db:generate": "drizzle-kit generate",
+    "contracts": "node src/scripts/export-openapi.ts",
+    "migrate:check": "node src/scripts/check-migrations.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.11",
+    "@hono/zod-openapi": "^1.6.3",
+    "@nexus/contracts": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/event-log": "workspace:*",
+    "@nexus/http-kit": "workspace:*",
+    "@nexus/system": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.22",
+    "pino": "^10.4.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@nexus/api-client": "workspace:*",
+    "drizzle-kit": "^0.31.11",
+    "vitest": "5.1.1"
+  }
+}

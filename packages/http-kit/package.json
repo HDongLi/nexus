@@ -1,0 +1,17 @@
+{
+  "name": "@nexus/http-kit",
+  "version": "0.0.0",
+  "private": true,
+  "description": "模块写 HTTP 路由的共同约定：访问级别、路由定义与绑定、统一的错误形状。不含业务",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "@nexus/contracts": "workspace:*",
+    "hono": "^4.13.22",
+    "zod": "^4.6.7"
+  }
+}

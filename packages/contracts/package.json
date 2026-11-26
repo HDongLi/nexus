@@ -1,0 +1,14 @@
+{
+  "name": "@nexus/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "description": "事件 schema 与前后端共享的 Zod schema。不含业务，不含数据访问",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "zod": "^4.6.7"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "nexus",
+  "version": "0.0.0",
+  "private": true,
+  "description": "nexus：前后端完全分离、契约驱动、面向智能体并行开发的 Web 平台内核",
+  "type": "module",
+  "scripts": {
+    "arch": "node tools/gates/arch.ts",
+    "contracts": "node tools/contracts.ts",
+    "dev": "node tools/dev.ts",
+    "new:module": "node tools/new-module.ts",
+    "format": "oxfmt .",
+    "gate:l0": "node tools/gates/l0.ts",
+    "gate:l1": "node tools/gates/l1.ts",
+    "gate:l2": "node tools/gates/l2.ts",
+    "gate:l3": "node tools/gates/l3.ts",
+    "lint": "oxlint .",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "typecheck:root": "tsc -p tsconfig.tools.json",
+    "verify": "node tools/gates/verify.ts"
+  },
+  "devDependencies": {
+    "@nexus/config": "workspace:*",
+    "@swc/core": "^1.16.22",
+    "@types/node": "^24.0.0",
+    "dependency-cruiser": "^18.9.0",
+    "oxfmt": "0.80.0",
+    "oxlint": "^1.95.0",
+    "turbo": "^2.11.13",
+    "typescript": "^7.0.2"
+  },
+  "engines": {
+    "node": ">=24.12.0"
+  },
+  "packageManager": "pnpm@12.23.0"
+}

@@ -1,3 +1,18 @@
+# 依赖与构建产物
+node_modules/
+dist/
+.turbo/
+coverage/
+playwright-report/
+test-results/
+
+# 运行态数据：本机开发库、日志、环境变量
+.data/
+logs/
+.env
+.env.*
+!.env.example
+
 # 策略文档含个人处境与收入结构，持有者自管，不入库（任务书 §5.1）
 docs/strategy/
 

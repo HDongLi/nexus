@@ -1,0 +1,14 @@
+packages:
+  - apps/*
+  - modules/*
+  - packages/*
+
+# 供应链最小信任面：发布不满一天的版本不进锁文件。真要用刚发布的版本，必须在这里点名放行。
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: true
+
+# 第三方包的安装脚本默认不跑，每一项都要在这里表态：true 放行，false 明确不跑。
+# esbuild 与 @swc/core 的平台二进制随可选依赖装好，安装脚本只是校验，所以不跑。
+allowBuilds:
+  esbuild: false
+  "@swc/core": false

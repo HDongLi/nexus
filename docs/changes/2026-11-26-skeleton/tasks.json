@@ -1,0 +1,159 @@
+[
+  {
+    "id": "T-0001",
+    "title": "工作区与工程配置",
+    "domain": "workspace",
+    "depends_on": [],
+    "scope": [
+      "package.json",
+      "pnpm-workspace.yaml",
+      "pnpm-lock.yaml",
+      "turbo.json",
+      "tsconfig.tools.json",
+      ".oxlintrc.json",
+      ".oxfmtrc.json",
+      ".gitignore",
+      "packages/config/**"
+    ],
+    "acceptance": ["pnpm install --frozen-lockfile", "node tools/gates/ts-versions.ts"],
+    "context": [
+      "docs/charter.md",
+      "docs/adr/0001-技术栈版本复核.md",
+      "docs/adr/0003-工具链约定与质量闸.md"
+    ]
+  },
+  {
+    "id": "T-0002",
+    "title": "基础包：共享 schema、数据库接入、HTTP 小件",
+    "domain": "packages",
+    "depends_on": ["T-0001"],
+    "scope": ["packages/contracts/**", "packages/db/**", "packages/http-kit/**"],
+    "acceptance": [
+      "pnpm exec turbo run typecheck --filter @nexus/contracts --filter @nexus/db --filter @nexus/http-kit",
+      "pnpm run arch"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0003-工具链约定与质量闸.md"
+    ]
+  },
+  {
+    "id": "T-0003",
+    "title": "事件记录模块",
+    "domain": "event-log",
+    "depends_on": ["T-0002"],
+    "scope": ["modules/event-log/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/event-log test",
+      "pnpm --filter @nexus/event-log typecheck",
+      "pnpm run arch"
+    ],
+    "context": ["docs/charter.md", "docs/adr/0002-模块解剖与契约管线.md"]
+  },
+  {
+    "id": "T-0004",
+    "title": "系统信息模块：健康探测、版本、启动登记",
+    "domain": "system",
+    "depends_on": ["T-0003"],
+    "scope": ["modules/system/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/system test",
+      "pnpm --filter @nexus/system typecheck",
+      "pnpm run arch"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "modules/event-log/module.md"
+    ]
+  },
+  {
+    "id": "T-0005",
+    "title": "后端应用与生成的契约客户端",
+    "domain": "api",
+    "depends_on": ["T-0004"],
+    "scope": ["apps/api/**", "packages/api-client/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/api test",
+      "pnpm --filter @nexus/api test:integration",
+      "pnpm --filter @nexus/api migrate:check",
+      "pnpm contracts -- --check",
+      "pnpm --filter @nexus/api-client test"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/adr/0001-技术栈版本复核.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "modules/system/module.md"
+    ]
+  },
+  {
+    "id": "T-0006",
+    "title": "前端应用与界面件",
+    "domain": "web",
+    "depends_on": ["T-0005"],
+    "scope": [
+      "apps/web/src/**",
+      "apps/web/index.html",
+      "apps/web/tsconfig.json",
+      "apps/web/vite.config.ts",
+      "apps/web/vitest.config.ts",
+      "packages/ui-kit/**"
+    ],
+    "acceptance": [
+      "pnpm --filter @nexus/web build",
+      "pnpm --filter @nexus/web test",
+      "pnpm --filter @nexus/web typecheck",
+      "pnpm run arch"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "packages/api-client/openapi.json"
+    ]
+  },
+  {
+    "id": "T-0007",
+    "title": "质量闸、契约生成、开发启动器",
+    "domain": "tools",
+    "depends_on": ["T-0001"],
+    "scope": ["tools/gates/**", "tools/contracts.ts", "tools/dev.ts", "package.json", "turbo.json"],
+    "acceptance": ["pnpm verify", "pnpm gate:l3", "pnpm run typecheck:root"],
+    "context": ["docs/charter.md", "docs/adr/0003-工具链约定与质量闸.md"]
+  },
+  {
+    "id": "T-0008",
+    "title": "端到端与持续集成",
+    "domain": "web",
+    "depends_on": ["T-0006", "T-0007"],
+    "scope": [
+      "apps/web/e2e/**",
+      "apps/web/playwright.config.ts",
+      "apps/web/package.json",
+      ".github/**"
+    ],
+    "acceptance": ["pnpm gate:l3"],
+    "context": ["docs/charter.md", "docs/adr/0003-工具链约定与质量闸.md"]
+  },
+  {
+    "id": "T-0009",
+    "title": "代理入口、模块脚手架、决策记录",
+    "domain": "docs",
+    "depends_on": ["T-0007"],
+    "scope": [
+      "AGENTS.md",
+      "README.md",
+      "tools/new-module.ts",
+      "tools/new-module/**",
+      "docs/adr/**",
+      "docs/changes/**"
+    ],
+    "acceptance": [
+      "pnpm new:module <任意名字> 之后该模块的 typecheck 与 test 通过",
+      "pnpm run typecheck:root",
+      "pnpm run arch"
+    ],
+    "context": ["docs/charter.md"]
+  }
+]

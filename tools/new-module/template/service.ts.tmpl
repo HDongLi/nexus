@@ -1,0 +1,27 @@
+/**
+ * 这个模块的用例。业务规则只住在这里；依赖全部由创建函数显式传进来，模块不自己去拿。
+ * 这一行到 300 行是上限，超了就拆，不调限额（任务书 P11）。
+ */
+export interface Ping {
+  name: string;
+  at: string;
+}
+
+export interface {{Name}}Service {
+  /** 示例用例：回一句话，证明从路由到用例是通的。 */
+  ping(): Promise<Ping>;
+}
+
+export interface {{Name}}Deps {
+  /** 当前时间。由应用或测试传入，模块不直接读系统时钟。 */
+  now?: () => Date;
+}
+
+export function create{{Name}}Service(deps: {{Name}}Deps): {{Name}}Service {
+  const now = deps.now ?? (() => new Date());
+  return {
+    async ping() {
+      return { name: "{{name}}", at: now().toISOString() };
+    },
+  };
+}
