@@ -29,7 +29,7 @@ export interface NoticeProps {
   /** 一行说清怎么办。出错时必填（实弹条款 2：失败要说清楚为什么、怎么办）。 */
   children?: ReactNode;
   /** 出错时的请求号，方便对日志。 */
-  requestId?: string;
+  requestId?: string | undefined;
   className?: string;
 }
 

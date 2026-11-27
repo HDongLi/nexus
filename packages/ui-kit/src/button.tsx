@@ -36,6 +36,14 @@ const buttonVariants = cva(
 export interface ButtonProps
   extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
 
+/** 只要按钮的类名、自己写元素的时候用（比如把类名铺到一个带路由的链接上）。 */
+export function buttonClass(
+  options?: VariantProps<typeof buttonVariants>,
+  className?: string,
+): string {
+  return cn(buttonVariants(options), className);
+}
+
 export function Button({ className, variant, size, type = "button", ...props }: ButtonProps) {
   return (
     <button type={type} className={cn(buttonVariants({ variant, size }), className)} {...props} />

@@ -4,11 +4,13 @@ import {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   type AnchorHTMLAttributes,
   type ButtonHTMLAttributes,
   type HTMLAttributes,
   type ReactNode,
+  type RefObject,
 } from "react";
 import { cn } from "./cn.ts";
 
@@ -66,17 +68,20 @@ export function AppShell({ sidebar, children }: { sidebar: ReactNode; children: 
     <ShellContext.Provider value={state}>
       <div className="flex h-dvh overflow-hidden bg-background text-foreground">
         {narrow && navOpen ? (
+          // 遮罩只给鼠标和手指用，不进 Tab 的顺序：键盘关抽屉用 Esc 或者页头上那个按钮。
           <button
             type="button"
+            tabIndex={-1}
             aria-label="收起导航"
-            className="fixed inset-0 z-30 bg-black/30 outline-none"
+            className="fixed inset-0 z-30 bg-black/30"
             onClick={() => setNavOpen(false)}
           />
         ) : null}
         <aside
-          // 点了导航里的任何一项就把抽屉收回去。
+          // 点了导航里的任何一项就把抽屉收回去。只认导航（nav）里的链接和按钮：
+          // 顶上的主题按钮、底下的账号按钮点开的是菜单和对话框，抽屉要留着（2026-11-27）。
           onClick={(event) => {
-            if ((event.target as HTMLElement).closest("a,button")) setNavOpen(false);
+            if ((event.target as HTMLElement).closest("nav a, nav button")) setNavOpen(false);
           }}
           className={cn(
             "flex w-60 shrink-0 flex-col border-r border-border bg-surface",
@@ -170,18 +175,31 @@ export function SidebarItem({
   );
 }
 
-export function SidebarFooter({ children, className }: HTMLAttributes<HTMLDivElement>) {
+/** 侧栏的底部：放当前用户的入口。文字的字号和颜色由放进来的东西自己带。 */
+export function SidebarFooter({ children, className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn(
-        // 四级墨只做占位；这里是一句状态，用三级。
-        "mt-auto flex items-center gap-2 border-t border-border px-4 py-3 text-caption text-ink-3",
-        className,
-      )}
+      className={cn("mt-auto flex items-center border-t border-border p-2", className)}
+      {...rest}
     >
       {children}
     </div>
   );
+}
+
+/**
+ * 抽屉收起的那一刻，焦点要是还留在里面（它整个被挪到窗口外面了），接回拉开它的按钮。
+ * 抽屉里有账号菜单这类点了不收抽屉的东西，所以「焦点在抽屉里、按 Esc 收抽屉」是走得通的路（2026-11-27）。
+ */
+function useTakeFocusBack(open: boolean, target: RefObject<HTMLButtonElement | null>): void {
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    const closed = wasOpen.current && !open;
+    wasOpen.current = open;
+    const active = document.activeElement;
+    if (closed && active instanceof HTMLElement && active.closest("aside") !== null)
+      target.current?.focus();
+  }, [open, target]);
 }
 
 /**
@@ -199,11 +217,14 @@ export function PageHeader({
   actions?: ReactNode;
 }) {
   const shell = useContext(ShellContext);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  useTakeFocusBack(shell?.navOpen ?? false, toggleRef);
   return (
     <header className="sticky top-0 z-20 flex h-14 items-center justify-between gap-3 border-b border-border bg-background/90 px-5 backdrop-blur md:px-8">
       <div className="flex min-w-0 items-center gap-2">
         {shell ? (
           <button
+            ref={toggleRef}
             type="button"
             aria-label={shell.navOpen ? "收起导航" : "展开导航"}
             aria-expanded={shell.navOpen}

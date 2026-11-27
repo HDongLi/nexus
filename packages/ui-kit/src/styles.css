@@ -42,6 +42,29 @@
   /* 版心。读的内容不超过 800，表格类页面可以放宽到 1120。 */
   --container-read: 50rem;
   --container-wide: 70rem;
+
+  /* 浮层出现：150 毫秒淡入，菜单和对话框顺带从九七成大小长开。只给浮在页面之上的东西用。 */
+  --animate-pop-in: pop-in 150ms ease-out;
+  --animate-fade-in: fade-in 150ms ease-out;
+
+  @keyframes pop-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 }
 
 :root {
@@ -209,5 +232,11 @@
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
+  }
+
+  /* Edge 会在每个口令框右端自带一个「显示口令」的眼睛，和输入框里自己放的那个叠在一起（2026-11-27）。 */
+  input::-ms-reveal,
+  input::-ms-clear {
+    display: none;
   }
 }

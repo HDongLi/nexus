@@ -1,53 +1,53 @@
+import { AppShell, ToastViewport } from "@nexus/ui-kit";
 import {
-  AppShell,
-  SidebarBrand,
-  SidebarFooter,
-  SidebarItem,
-  SidebarLabel,
-  SidebarNav,
-} from "@nexus/ui-kit";
-import { Outlet, createRootRoute } from "@tanstack/react-router";
-import { Activity } from "lucide-react";
+  HeadContent,
+  Outlet,
+  createRootRouteWithContext,
+  redirect,
+  useRouterState,
+} from "@tanstack/react-router";
+import { AppSidebar } from "../components/app-sidebar.tsx";
+import { NotFoundPage, RouteErrorPage } from "../components/route-fallbacks.tsx";
+import { useToasts } from "../components/use-toasts.ts";
+import { LOGIN_PATH, isPublicPath, loginSearch, safeRedirectTarget } from "../lib/auth-gate.ts";
+import type { RouterContext } from "../lib/router-context.ts";
+import { meQuery } from "../lib/session.ts";
 
-export const Route = createRootRoute({
-  // 整个应用共用一副框架：导航栏在这里配一次，各路由只管自己的内容区。
-  component: () => (
-    <AppShell sidebar={<AppSidebar />}>
-      <Outlet />
-    </AppShell>
-  ),
+export const Route = createRootRouteWithContext<RouterContext>()({
+  // 登录的闸：除了公开的页面，进任何页面之前先问一次「我是谁」。问不出来就去登录页，登录后回到这里。
+  // 只用 replace：按「后退」不该一次又一次被弹回登录页。
+  beforeLoad: async ({ context, location }) => {
+    if (isPublicPath(location.pathname)) return;
+    try {
+      await context.queryClient.ensureQueryData(meQuery);
+    } catch {
+      throw redirect({
+        to: LOGIN_PATH,
+        search: loginSearch(safeRedirectTarget(location.href)),
+        replace: true,
+      });
+    }
+  },
+  component: RootLayout,
+  notFoundComponent: NotFoundPage,
+  errorComponent: RouteErrorPage,
 });
 
-/** 标志：一个环加一个心点，「枢纽」的意思。只用强调色，不用渐变。 */
-function BrandMark() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 20 20"
-      className="size-5 shrink-0 text-primary"
-      fill="none"
-    >
-      <circle cx="10" cy="10" r="7.5" stroke="currentColor" strokeWidth="1.75" />
-      <circle cx="10" cy="10" r="2.5" fill="currentColor" />
-    </svg>
-  );
-}
-
-function AppSidebar() {
+/** 整个应用分两块：登录页不要外壳，其余页面都是「侧栏加内容区」。 */
+function RootLayout() {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const toasts = useToasts();
   return (
     <>
-      <SidebarBrand>
-        <BrandMark />
-        <span className="text-body font-semibold tracking-tight">nexus</span>
-      </SidebarBrand>
-      <SidebarNav label="主导航">
-        <SidebarLabel>平台</SidebarLabel>
-        <SidebarItem active>
-          <Activity />
-          系统状态
-        </SidebarItem>
-      </SidebarNav>
-      <SidebarFooter>登录尚未接入</SidebarFooter>
+      <HeadContent />
+      {isPublicPath(pathname) ? (
+        <Outlet />
+      ) : (
+        <AppShell sidebar={<AppSidebar onNotice={toasts.show} />}>
+          <Outlet />
+        </AppShell>
+      )}
+      <ToastViewport toasts={toasts.items} onDismiss={toasts.dismiss} />
     </>
   );
 }

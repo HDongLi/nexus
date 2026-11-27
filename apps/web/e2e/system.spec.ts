@@ -1,42 +1,46 @@
-// The skeleton's one journey: open the page, see it ask the backend, see the answer or a
-// visible error. Everything goes through the page's own origin (charter §11 rule 4, in the
-// shape this skeleton can do today; the real domain and cookies come with the identity module).
-import { expect, test, type Page } from "@playwright/test";
+// The system status page, through the page's own origin (charter §11 rule 4): sign in, see the
+// page ask the backend, see the answer or a visible error. What signing in and out answers, and
+// what the interface says without a session, is in session.spec.ts.
+import { expect, test } from "@playwright/test";
+import { signIn } from "./sign-in.ts";
+import { watchForMistakes } from "./watch.ts";
 
-/** Two things a page must never do: throw, or put a business message in a native dialog (§11 rule 2). */
-function watchForMistakes(page: Page): string[] {
-  const mistakes: string[] = [];
-  page.on("pageerror", (error) => mistakes.push(`脚本异常：${error.message}`));
-  page.on("dialog", async (dialog) => {
-    mistakes.push(`原生弹窗：${dialog.type()}`);
-    await dialog.dismiss();
-  });
-  return mistakes;
-}
-
-test("首页把后端的健康状态显示出来", async ({ page }) => {
-  const mistakes = watchForMistakes(page);
-  await page.goto("/");
+test("登录后，首页把后端的健康状态显示出来", async ({ page }) => {
+  const clean = watchForMistakes(page);
+  await signIn(page);
 
   const cells = page.getByRole("region", { name: "健康状态" }).locator("dd");
   await expect(cells.nth(0)).toHaveText("正常", { timeout: 15_000 });
   await expect(cells.nth(1)).toHaveText(/^\d+\.\d+\.\d+/);
   await expect(cells.nth(2)).toHaveText("正常");
 
-  expect(mistakes).toEqual([]);
+  clean();
 });
 
-// Rewritten when the identity module lands: then this section shows boot records instead.
-test("还没有接入的能力，页面把原因和请求号显示在卡里", async ({ page }) => {
-  const mistakes = watchForMistakes(page);
-  await page.goto("/");
+test("接口出错时，页面把原因和请求号显示在卡里，别的卡照常", async ({ page }) => {
+  const clean = watchForMistakes(page);
+  const requestId = "0f1e2d3c-4b5a-4968-8777-66554433a211";
+  // 让「启动信息」这一个接口出错。健康状态走的另一个接口，照常。
+  await page.route("**/api/v1/system/info", (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      headers: { "x-request-id": requestId },
+      body: JSON.stringify({
+        error: { code: "internal_error", message: "服务器内部错误", requestId },
+      }),
+    }),
+  );
+  await signIn(page);
 
   const alert = page.getByRole("region", { name: "启动信息" }).getByRole("alert");
-  await expect(alert).toContainText("需要登录");
-  await expect(alert).toContainText("身份模块还没有接入");
-  await expect(alert).toContainText(/请求号 [0-9a-f-]{36}/);
+  await expect(alert).toContainText("服务器出了问题");
+  await expect(alert).toContainText(`请求号 ${requestId}`);
+  await expect(page.getByRole("region", { name: "健康状态" }).locator("dd").nth(0)).toHaveText(
+    "正常",
+  );
 
-  expect(mistakes).toEqual([]);
+  clean();
 });
 
 test("接口的失败回统一的形状，带请求号", async ({ request }) => {
@@ -51,9 +55,4 @@ test("接口的失败回统一的形状，带请求号", async ({ request }) => 
   expect(body).toMatchObject({ error: { code: "not_found" } });
   const error = (body as { error: { requestId: string } }).error;
   expect(error.requestId).toBe(missing.headers()["x-request-id"]);
-
-  // The skeleton says so out loud instead of pretending to check a session (apps/api/src/verify.ts).
-  const info = await request.get("/api/v1/system/info");
-  expect(info.status()).toBe(501);
-  expect(await info.json()).toMatchObject({ error: { code: "auth_not_wired" } });
 });

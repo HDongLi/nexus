@@ -1,4 +1,3 @@
-import { type ApiFailure, type CallResult, failureOf } from "@nexus/api-client";
 import {
   Button,
   DescriptionDetail,
@@ -12,29 +11,17 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@nexus/ui-kit";
-import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Activity, Info, RefreshCw } from "lucide-react";
 import { api } from "../lib/api.ts";
 import { explainFailure } from "../lib/failure.ts";
 import { formatLocalTime } from "../lib/time.ts";
+import { useEndpoint } from "../lib/use-endpoint.ts";
 
 export const Route = createFileRoute("/")({
+  head: () => ({ meta: [{ title: "系统状态 · nexus" }] }),
   component: SystemPage,
 });
-
-/** 调一个接口：成功的给数据，失败的给翻好的原因。页面只管显示。 */
-function useEndpoint<T>(key: string[], call: () => Promise<CallResult & { data?: T }>) {
-  return useQuery({
-    queryKey: key,
-    queryFn: async (): Promise<{ ok: true; data: T } | { ok: false; failure: ApiFailure }> => {
-      // 失败只看有没有数据：响应体读不出来的时候，error 也是空的。
-      const result = await call();
-      if (result.data === undefined) return { ok: false, failure: failureOf(result) };
-      return { ok: true, data: result.data };
-    },
-  });
-}
 
 const HEALTH_TEXT: Record<"ok" | "degraded", [StatusTone, string]> = {
   ok: ["ok", "正常"],
@@ -107,7 +94,11 @@ function SystemPage() {
             </DescriptionList>
           ) : null}
           {health.data && !health.data.ok ? (
-            <Notice tone="error" title="连不上后端" requestId={health.data.failure.requestId}>
+            <Notice
+              tone="error"
+              title="连不上后端"
+              requestId={explainFailure(health.data.failure).requestId}
+            >
               {explainFailure(health.data.failure).detail}
             </Notice>
           ) : null}
@@ -123,7 +114,9 @@ function SystemPage() {
               </DescriptionDetail>
               <DescriptionTerm>启动编号</DescriptionTerm>
               <DescriptionDetail>
-                <InlineCode>{info.data.data.boot.bootId}</InlineCode>
+                <InlineCode className="whitespace-normal break-all">
+                  {info.data.data.boot.bootId}
+                </InlineCode>
               </DescriptionDetail>
               <DescriptionTerm>最近启动</DescriptionTerm>
               <DescriptionDetail>{info.data.data.recentBoots.length} 次</DescriptionDetail>
@@ -133,7 +126,7 @@ function SystemPage() {
             <Notice
               tone="error"
               title={explainFailure(info.data.failure).title}
-              requestId={info.data.failure.requestId}
+              requestId={explainFailure(info.data.failure).requestId}
             >
               {explainFailure(info.data.failure).detail}
             </Notice>
