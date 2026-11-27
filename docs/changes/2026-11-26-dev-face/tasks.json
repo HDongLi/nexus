@@ -100,5 +100,23 @@
     ],
     "acceptance": ["pnpm gate:l0"],
     "context": ["docs/charter.md", "AGENTS.md"]
+  },
+  {
+    "id": "T-0016",
+    "title": "规格：工程",
+    "domain": "projects",
+    "depends_on": ["T-0011"],
+    "scope": ["docs/spec/projects.md", "docs/changes/2026-11-26-dev-face/tasks.json"],
+    "acceptance": ["规格里每条要求都有来源和验收方式", "全文不含内部名称与真实账号名"],
+    "context": [
+      "docs/charter.md",
+      "docs/parity/SCHEMA.md",
+      "docs/parity/backlog.md",
+      "docs/parity/routes.csv",
+      "docs/parity/parts/e-data.jsonl",
+      "docs/spec/identity.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "AGENTS.md"
+    ]
   }
 ]
