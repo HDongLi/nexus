@@ -1,0 +1,140 @@
+# 设计：第 2 片——工程
+
+| 项 | 内容 |
+|---|---|
+| 日期 | 2026-11-27 |
+| 状态 | 定稿。实现照它做，改动走新的变更 |
+| 跟着 | [proposal.md](proposal.md)、[规格：工程](../../spec/projects.md)；表上的引用约束跟[规格：人员与用户组](../../spec/people.md) G-21、G-31 |
+
+行为以规格为准；这里记它落在哪些文件、哪些表、哪些契约上。
+
+## 形状
+
+```
+浏览器 ──会话 cookie──▶ 访问闸 ──▶ projects 模块 ──┬──▶ projects 表（库）──引用约束──▶ identity_users
+                                                    ├──▶ git（异步子进程，带超时）──▶ PROJECTS_ROOT/<编号>.git
+                                                    └──▶ 事件日志（和写入在同一个事务）
+```
+
+| 住在哪 | 放什么 |
+|---|---|
+| `modules/projects` | 四条路由的声明、用例、仓储、一张表、两个事件、git 执行器、可见性判定、测试。骨架用 `pnpm new:module projects --title <一句话>` 起 |
+| `modules/identity` | 出口多导出一样：`identityUsers` 表定义，只给别的模块建引用约束用；模块卡记一笔 |
+| `apps/api` | 组合根把工程模块挂上；配置里加 `PROJECTS_ROOT`；启动时把目录建出来；契约来源加一行 |
+| `apps/web` | 工程页：清单、新建、详情、改显示名和头像字。归任务卡 T-0018，不在后端这一张卡里 |
+
+## 和身份模块的关系
+
+两个模块之间只有「工程 → 身份」一个方向，而且只在表定义上：
+
+- `projects.created_by_id` 用引用约束指向 `identity_users.id`，`ON DELETE RESTRICT`。建过工程的账号因此删不掉，由库把关；身份模块删号时把库的拒绝翻译成 409（[人员规格](../../spec/people.md) G-21）。这一片身份模块还没有删号的路由，约束先建好，第 3 片直接用。
+- 引用的是身份模块**出口**导出的表定义（`modules/identity/index.ts` 里加一行 `export { identityUsers } from "./schema.ts"`），不是伸进它的 `schema.ts`。依赖方向检查只认出口。
+- 运行时谁也不调谁。工程模块不读账号表：创建人只存编号，「这是谁」由页面另问同事名录（第 3 片提供）。
+- 第 3 片会给这个模块加一张关系表（哪个组看得见哪些工程），同样用引用约束指向身份模块的用户组表（[人员规格](../../spec/people.md) G-31）。这一片不留钩子，到时照那张规格加。
+
+生成迁移时 drizzle-kit 会顺着出口把身份模块的用例和路由代码也加载进来，这是预期的；依赖装齐就加载得了，不要为此在身份模块里另开一个绕过出口的入口。
+
+## 契约
+
+| 方法与路径 | 访问级别 | 作用 | 成功 | 失败 |
+|---|---|---|---|---|
+| `GET /api/v1/projects` | user | 看得见的工程，新的在前 | 200 `{ projects: Project[] }` | 401、500 |
+| `POST /api/v1/projects` | user | 新建 | 201 `{ project }`，仓库已可用 | 400 `invalid_request`；409 `projects_slug_taken`；500 `projects_creation_failed` |
+| `GET /api/v1/projects/{projectId}` | user | 详情 | 200 `{ project: ProjectDetail }` | 404 `not_found`；500 |
+| `PATCH /api/v1/projects/{projectId}` | user | 改显示名、头像字 | 200 `{ project }` | 400；403 `projects_forbidden`；404 |
+
+```ts
+project       = { id, slug, displayName, avatar, createdById, createdAt, updatedAt }
+projectDetail = { ...project, head: { commitId, committedAt, subject } }
+createRequest = { slug, displayName?, avatar? }
+patchRequest  = { displayName?, avatar? }   // 至少带一个；带 slug 一律 400
+```
+
+## 表
+
+模块拥有一张表，定义在 `modules/projects/schema.ts`。
+
+| 表 | 列 | 说明 |
+|---|---|---|
+| `projects` | `id` uuid 主键、`slug`、`display_name`、`avatar`、`created_by_id`、`created_at`、`updated_at` | `slug` 上有唯一约束。`created_by_id` 非空，引用 `identity_users.id`，`ON DELETE RESTRICT`（见上一节） |
+
+## 短名
+
+`^[a-z0-9][a-z0-9-]{0,63}$`，按原样保存，不 Trim、不改大小写。创建后没有改它的途径。
+
+## 建仓
+
+一次新建走这几步，任何一步失败都回到什么都没发生过（规格 P-20）：
+
+1. 校验请求体。
+2. 先查一遍短名有没有被占用。占了就直接回 409，不跑 git。这一步只是省事，真正的保证是库里的唯一约束。
+3. 生成编号。在 `PROJECTS_ROOT/.tmp/<编号>/` 里建一个临时的普通仓库：`git init`，写 `README.md`、`AGENTS.md`、`.gitignore`，`git add`，`git commit`。
+4. `git clone --bare` 到 `PROJECTS_ROOT/<编号>.git`，删掉临时目录。
+5. 开事务：写记录，发事件。撞上唯一约束就删掉刚建的裸仓库，回 409；别的原因回 500。
+6. 中途任何一步 git 失败或超时：删掉两个目录，回 500 `projects_creation_failed`。底层原因连同请求号写进日志，不回显路径。
+
+目录名取编号不取短名：短名以后可能随删除功能被重用，崩溃留下的半截目录也不该占住一个短名。
+
+**跑 git 的规矩**（规格 P-18、P-22）：
+
+- 走一个可替换的执行器接口 `run(args, cwd?)`，缺省实现是异步子进程。git 可执行文件的位置和每条命令的超时（缺省 30 秒）都从构造参数进来，测试换桩；超时就结束那个子进程。
+- 不读服务器用户的 git 配置：设 `GIT_CONFIG_NOSYSTEM=1`、`GIT_CONFIG_GLOBAL` 指向一个空文件、`GIT_TERMINAL_PROMPT=0`，分支名和作者都显式给。
+- 作者和提交者是一组模块常量：`nexus <nexus@localhost>`。
+- 初始提交的三个文件：`README.md` 一行；`AGENTS.md` 一段通用说明；`.gitignore` 只列操作系统杂物、`.env*`（放行 `.env.example`）、`*.log`。
+
+## 详情里的最新提交
+
+一次 git：`git --git-dir=<裸仓库> log -1 --format=%H%n%cI%n%s main`。失败或超时回 500 `internal_error`，不回一个 `head` 为空的详情。
+
+## 显示名与头像字
+
+- 显示名：去掉首尾空白后 0 到 40 个码点，不含控制字符。头像字：0 到 2 个码点，不含空白和控制字符。超长不截断，回 400。
+- 空串就是清除。页面显示时，显示名为空回落成短名，头像字为空回落成显示内容的首个字符。
+- 只有创建者和管理员能改；看得见但不属这两种的回 403 `projects_forbidden`；看不见的回 404。
+- 改后的值和库里一样：回 200，不更新更新时间，不发事件。
+
+## 可见性
+
+模块从构造参数收一个判定 `canSee(project, user)`，清单、详情、改三处都只问它。这一片接上的实现是：管理员，或者创建者。第 3 片换成一个带用户组的实现，这个模块的路由和用例不用改；那边的实现要查关系表，判定的形状到那时再定。
+
+看不见和不存在回得一样，都是 404。
+
+## 事件
+
+走事件日志，`source` 是 `projects`，`subject` 是工程编号，和写入在同一个事务里。
+
+| 事件 | payload |
+|---|---|
+| `projects.project.created` | `{ projectId, slug, actorId }` |
+| `projects.project.updated` | `{ projectId, slug, actorId, changes }` |
+
+## 配置
+
+`PROJECTS_ROOT`：不给就是 `<DATA_DIR>/projects`。启动时目录不在就建出来，建不出来就启动失败。
+
+## 页面
+
+| 路由 | 内容 |
+|---|---|
+| `/projects` | 清单。每行：头像字、显示名（空则短名）、短名、创建时间。右上一个「新建工程」 |
+| 新建对话框 | 短名、显示名、头像字。重名的原因常显在对话框里 |
+| `/projects/{projectId}` | 详情：记录的字段，加最新一次提交的编号、时间、标题；「改显示名和头像字」的入口（只有创建者和管理员看得到） |
+| 改显示名对话框 | 显示名、头像字 |
+
+清单只在第一次进入和手动刷新时取，不轮询。
+
+## 验证
+
+| 验的是什么 | 在哪一层 |
+|---|---|
+| 短名、显示名、头像字的规则 | 单元测试，表驱动 |
+| 清单只读库不跑 git；可见性判定可替换；看不见回 404 且和不存在的回应逐字相同 | 集成测试 |
+| 新建：clone 得到、分支、提交数、三个文件的内容；失败和超时不留痕（每一步各换一个失败桩）；同短名并发只成一个 | 集成测试，`PROJECTS_ROOT` 指到临时目录，用真的 git |
+| 不读服务器用户的 git 配置 | 集成测试，环境里给一份不同的全局配置 |
+| `created_by_id` 的引用约束：绕过接口删一个建过工程的账号，库拒绝 | 集成测试 |
+| 详情的 `head`；读不到提交回 500 | 集成测试 |
+| 两个事件的时机和内容；和写入同一个事务 | 集成测试 |
+| 响应和事件里没有服务器路径 | 集成测试 |
+| 真浏览器：新建后清单第一行就是它；改显示名后清单跟着变；重名的原因常显 | 端到端（T-0018） |
+
+新建要跑几条 git，耗时任务书还没有量过。实现时在集成测试里记下本机实测值（新建接口从收到请求到回 201），写进模块卡；超过写接口的预算（p95 不超过 200 毫秒）的话，在这里写明并留给决策记录处理。

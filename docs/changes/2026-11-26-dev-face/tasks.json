@@ -120,6 +120,67 @@
     ]
   },
   {
+    "id": "T-0017",
+    "title": "实现：工程模块（后端）",
+    "domain": "projects",
+    "depends_on": ["T-0012", "T-0016"],
+    "scope": [
+      "modules/projects/**",
+      "modules/identity/index.ts",
+      "modules/identity/module.md",
+      "apps/api/**",
+      "packages/api-client/**",
+      "packages/contracts/**",
+      "packages/http-kit/**",
+      "packages/db/**",
+      "**/package.json",
+      "pnpm-workspace.yaml",
+      "turbo.json",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "acceptance": [
+      "pnpm contracts -- --check",
+      "pnpm --filter @nexus/projects test",
+      "pnpm --filter @nexus/api test:integration",
+      "pnpm verify"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/projects.md",
+      "docs/spec/identity.md",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0003-工具链约定与质量闸.md",
+      "modules/identity/module.md",
+      "modules/system/module.md",
+      "modules/event-log/module.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0018",
+    "title": "实现：工程页（前端）",
+    "domain": "web",
+    "depends_on": ["T-0013", "T-0017"],
+    "scope": ["apps/web/**", "packages/ui-kit/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/web test",
+      "pnpm --filter @nexus/web typecheck",
+      "pnpm gate:l3"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/projects.md",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md",
+      "docs/adr/0004-视觉语言.md",
+      "packages/api-client/openapi.json",
+      "AGENTS.md"
+    ]
+  },
+  {
     "id": "T-0019",
     "title": "规格：人员与用户组",
     "domain": "identity",
@@ -140,6 +201,20 @@
       "docs/spec/identity.md",
       "docs/spec/projects.md",
       "docs/adr/0002-模块解剖与契约管线.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0020",
+    "title": "审查：第 2 片",
+    "domain": "projects",
+    "depends_on": ["T-0018"],
+    "scope": ["docs/changes/2026-11-26-dev-face/review-02-projects.md"],
+    "acceptance": ["审查报告里每条结论都有复现步骤或命令输出作证"],
+    "context": [
+      "docs/spec/projects.md",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
       "AGENTS.md"
     ]
   }
