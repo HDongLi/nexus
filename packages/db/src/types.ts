@@ -1,3 +1,4 @@
+import type { ExtractTablesWithRelations } from "drizzle-orm";
 import type { PgliteDatabase } from "drizzle-orm/pglite";
 import type { PgliteQueryResultHKT } from "drizzle-orm/pglite/session";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -10,8 +11,20 @@ import type { PgTransaction } from "drizzle-orm/pg-core/session";
  */
 export type Db = NodePgDatabase | PgliteDatabase;
 
-/** 一个打开的事务。事件要和业务写入同生共死时，把它传下去。 */
-export type Tx = PgTransaction<NodePgQueryResultHKT> | PgTransaction<PgliteQueryResultHKT>;
+/** 这个仓不往 drizzle 里登记关系，所以全库的表描述就是「空」。 */
+type NoSchema = Record<string, never>;
+
+/**
+ * 一个打开的事务。事件要和业务写入同生共死时，把它传下去。
+ *
+ * 第三个类型参数要照 `transaction()` 实际交出来的写，不能用 PgTransaction 的缺省值：
+ * 缺省是 `Record<string, never>`，交出来的却是 `ExtractTablesWithRelations<TFullSchema>`，
+ * 两者在 `exactOptionalPropertyTypes` 下互相赋不上（2026-11-27 身份模块第一次真的开事务时暴露；
+ * 骨架期这两个类型只被引用过，没被一个真事务赋值过）。
+ */
+export type Tx =
+  | PgTransaction<NodePgQueryResultHKT, NoSchema, ExtractTablesWithRelations<NoSchema>>
+  | PgTransaction<PgliteQueryResultHKT, NoSchema, ExtractTablesWithRelations<NoSchema>>;
 
 /** 一个可执行 SQL 的连接、连接池，或者一个打开的事务。 */
 export type Executor = Db | Tx;

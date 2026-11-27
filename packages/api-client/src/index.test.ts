@@ -35,22 +35,23 @@ describe("契约客户端", () => {
   // `response` looked fine when tested with a fresh Response, and lost the failure's reason in
   // the browser, because the client had already consumed the body.
   it("经过客户端的失败，原因和请求号都还在", async () => {
+    // 样例取的是这个接口现在没登录时的真回应（2026-11-27 身份模块接入后是 401，不再是 501）
     const api = createApiClient({
       baseUrl: "http://app.test",
       fetch: async () =>
         new Response(
           JSON.stringify({
-            error: { code: "auth_not_wired", message: "需要登录", requestId: "r-1" },
+            error: { code: "auth_required", message: "请先登录", requestId: "r-1" },
           }),
-          { status: 501, headers: { "x-request-id": "r-1" } },
+          { status: 401, headers: { "x-request-id": "r-1" } },
         ),
     });
     const result = await api.GET("/api/v1/system/info");
     expect(result.data).toBeUndefined();
     expect(failureOf(result)).toEqual({
-      status: 501,
-      code: "auth_not_wired",
-      message: "需要登录",
+      status: 401,
+      code: "auth_required",
+      message: "请先登录",
       requestId: "r-1",
     });
   });

@@ -1,5 +1,5 @@
 import type { AuthLevel } from "@nexus/contracts";
-import type { DeclaredRoute } from "@nexus/http-kit";
+import { SESSION_COOKIE, type DeclaredRoute } from "@nexus/http-kit";
 import { OpenAPIHono, type RouteConfig, type RouteHandler } from "@hono/zod-openapi";
 import type { AppEnv } from "@nexus/http-kit";
 
@@ -14,9 +14,6 @@ export interface ApiInfo {
   version: string;
   [key: `x-${string}`]: unknown;
 }
-
-/** 会话 cookie 的名字。鉴权方式写进契约，生成的客户端和文档都看得到。 */
-export const SESSION_COOKIE = "nexus_session";
 
 export type OpenApiDocument = ReturnType<OpenAPIHono<AppEnv>["getOpenAPI31Document"]>;
 
@@ -41,7 +38,8 @@ export function buildOpenApiDocument(
   const doc = app.getOpenAPI31Document({
     openapi: "3.1.0",
     info,
-    tags: sources.map((source) => ({ name: source.name })),
+    // 同名只列一次：契约文档那条路由归在 system 名下，和系统模块同名，逐个照搬会把 system 列两遍（2026-11-27 修）。
+    tags: [...new Map(sources.map((source) => [source.name, { name: source.name }])).values()],
   });
   // 这个版本的 @hono/zod-openapi 不在文档配置里收 components，所以直接并到生成的文档上。
   doc.components = {

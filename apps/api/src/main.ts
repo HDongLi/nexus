@@ -1,17 +1,10 @@
-import { createDatabase, runMigrations } from "@nexus/db";
-import { createEventLog } from "@nexus/event-log";
-import { createSystemModule, createSystemRepo, systemContract } from "@nexus/system";
-import { randomUUID } from "node:crypto";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { pino, type Logger } from "pino";
-import { createApp } from "./app.ts";
+import { composeApp } from "./compose.ts";
+import { openDatabase } from "./database.ts";
 import { loadConfig } from "./config.ts";
 import { listenWithFallback, type Listening } from "./listen.ts";
 import { VERSION } from "./version.ts";
-import { notWiredYet } from "./verify.ts";
 
-const migrationsFolder = fileURLToPath(new URL("../drizzle/", import.meta.url));
 /** 停止时最多等这么久，超时强制退出，不留僵尸进程（实弹条款 15）。 */
 const SHUTDOWN_GRACE_MS = 8000;
 
@@ -23,28 +16,17 @@ async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const log = pino({ level: config.LOG_LEVEL, base: { service: "api", version: VERSION } });
 
-  const database = await createDatabase({
-    url: config.DATABASE_URL,
-    dataDir: join(config.DATA_DIR, "pgdata"),
-  });
-  await runMigrations(database, migrationsFolder);
+  const database = await openDatabase(config);
   log.info({ database: database.kind }, "数据库就绪");
 
-  // 每次启动一个新编号，用来把这一轮的日志和事件串起来。
-  const bootId = randomUUID();
-  const eventLog = createEventLog({ db: database.db });
-  const system = createSystemModule({
-    repo: createSystemRepo(database.db),
-    eventLog,
+  // 模块怎么接在一起只有一份，在 compose.ts 里；测试用的也是它。
+  const { app, bootId } = await composeApp({
+    db: database.db,
+    log,
     version: VERSION,
     runtime: process.version,
-  });
-  await system.service.recordStart(bootId);
-
-  const { app } = createApp({
-    log,
-    modules: [{ name: systemContract.name, bindings: system.bindings }],
-    verify: notWiredYet,
+    publicOrigin: config.PUBLIC_ORIGIN,
+    passwordMinLength: config.PASSWORD_MIN_LENGTH,
   });
   const { server, port } = await listenWithFallback(
     app,

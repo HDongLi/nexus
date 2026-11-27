@@ -49,7 +49,7 @@ export const infoRoute = route("user", {
   tags: ["system"],
   responses: {
     200: json(systemInfoSchema, "版本、本次启动、最近五次启动"),
-    ...errors(401, 403, 501, 500),
+    ...errors(401, 403, 500),
   },
 });
 

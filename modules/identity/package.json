@@ -1,0 +1,29 @@
+{
+  "name": "@nexus/identity",
+  "version": "0.0.0",
+  "private": true,
+  "description": "身份与会话：口令登录、会话 cookie、登录锁定、本人改密、审计事件",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "@nexus/contracts": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/event-log": "workspace:*",
+    "@nexus/http-kit": "workspace:*",
+    "argon2": "^0.45.2",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.22",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "5.1.1"
+  }
+}

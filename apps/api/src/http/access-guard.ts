@@ -1,23 +1,13 @@
 import type { Context, MiddlewareHandler } from "hono";
 import type { AuthLevel } from "@nexus/contracts";
 import { fail, type AnyRouteBinding, type AppEnv } from "@nexus/http-kit";
+import { findEntry, routeTable } from "./route-match.ts";
 
 /** 验证调用者够不够级别。够就返回 undefined 放行；不够就返回要回给调用方的响应。 */
 export type AccessVerifier = (
   c: Context<AppEnv>,
   level: Exclude<AuthLevel, "public">,
 ) => Promise<Response | undefined>;
-
-interface Entry {
-  method: string;
-  pattern: RegExp;
-  level: AuthLevel;
-}
-
-/** OpenAPI 的 {参数} 路径转成正则：一段里不含斜杠的任何内容。 */
-function toPattern(path: string): RegExp {
-  return new RegExp(`^${path.replace(/\{[^/}]+\}/g, "[^/]+")}$`);
-}
 
 /**
  * 访问闸：每条路由的访问级别是声明出来的，这里照着执行。
@@ -28,16 +18,12 @@ export function accessGuard(
   bindings: readonly AnyRouteBinding[],
   verify: AccessVerifier,
 ): MiddlewareHandler<AppEnv> {
-  const entries: Entry[] = bindings.map((binding) => ({
-    method: binding.route.method.toUpperCase(),
-    pattern: toPattern(binding.route.path),
-    level: binding.access,
-  }));
+  const table = routeTable(bindings, (binding) => binding.access);
 
   return async (c, next) => {
-    const entry = entries.find((e) => e.method === c.req.method && e.pattern.test(c.req.path));
-    if (!entry) return fail(c, 404, "not_found", "没有这个接口");
-    if (entry.level === "public") return next();
-    return (await verify(c, entry.level)) ?? next();
+    const level = findEntry(table, c.req.method, c.req.path);
+    if (level === undefined) return fail(c, 404, "not_found", "没有这个接口");
+    if (level === "public") return next();
+    return (await verify(c, level)) ?? next();
   };
 }

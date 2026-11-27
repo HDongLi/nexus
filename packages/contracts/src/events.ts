@@ -1,8 +1,13 @@
 import { z } from "zod";
 
-/** 模块名与事件名只用小写字母、数字和连字符。事件名是「模块.动作」，如 system.started。 */
+/** 模块名只用小写字母、数字和连字符。 */
 export const moduleName = z.string().regex(/^[a-z][a-z0-9-]*$/);
-export const eventName = z.string().regex(/^[a-z][a-z0-9-]*\.[a-z][a-z-]*$/);
+/**
+ * 事件名是「模块.动作」（system.started）或「模块.对象.动作」（identity.login.succeeded）。
+ * 2026-11-27 起允许三段：身份模块的事件要带一层对象，登录成功和改密成功才分得开；
+ * 两段的照旧合法（规格 I-42）。
+ */
+export const eventName = z.string().regex(/^[a-z][a-z0-9-]*\.[a-z][a-z-]*(?:\.[a-z][a-z-]*)?$/);
 
 /**
  * 事件信封：全平台每一条事件都长这个样子（主张 P7）。

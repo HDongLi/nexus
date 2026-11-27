@@ -19,7 +19,7 @@ const ping = route("public", {
 const secret = route("admin", {
   method: "get",
   path: `${API_PREFIX}/secret`,
-  responses: { 200: json(z.object({ ok: z.boolean() }), "ok"), ...errors(401, 403, 501) },
+  responses: { 200: json(z.object({ ok: z.boolean() }), "ok"), ...errors(401, 403) },
 });
 
 const echo = route("public", {

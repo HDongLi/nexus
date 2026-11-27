@@ -9,6 +9,9 @@ minimumReleaseAgeStrict: true
 
 # 第三方包的安装脚本默认不跑，每一项都要在这里表态：true 放行，false 明确不跑。
 # esbuild 与 @swc/core 的平台二进制随可选依赖装好，安装脚本只是校验，所以不跑。
+# argon2 同理：预编译件随包发布（Windows x64、Linux x64 与 arm64 的 glibc 和 musl），不跑安装脚本也能用。
+# 不要用 pnpm approve-builds 放行它（2026-11-26 实测）。
 allowBuilds:
   esbuild: false
   "@swc/core": false
+  argon2: false

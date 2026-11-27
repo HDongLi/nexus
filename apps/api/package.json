@@ -11,6 +11,7 @@
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:generate": "drizzle-kit generate",
+    "user:add": "node src/scripts/create-user.ts",
     "contracts": "node src/scripts/export-openapi.ts",
     "migrate:check": "node src/scripts/check-migrations.ts"
   },
@@ -21,6 +22,7 @@
     "@nexus/db": "workspace:*",
     "@nexus/event-log": "workspace:*",
     "@nexus/http-kit": "workspace:*",
+    "@nexus/identity": "workspace:*",
     "@nexus/system": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.22",

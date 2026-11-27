@@ -7,6 +7,7 @@ nexus 是一个 Web 平台内核：前后端完全分离，靠生成的契约对
 | 要做什么 | 命令 |
 |---|---|
 | 起全栈：后端加页面，端口自动找空闲的，Ctrl+C 一起停 | `pnpm dev` |
+| 建账号：在 `apps/api` 下跑，服务要先停掉；口令从标准输入读第一行，不走命令行参数 | `printf '%s\n' '<口令>' \| node src/scripts/create-user.ts --username <用户名> --admin --password-stdin` |
 | 新建模块（生成的模块自己过类型检查和测试） | `pnpm new:module <名字> --title <一句话>` |
 | 提交前：格式、lint、依赖方向、任务范围 | `pnpm gate:l0` |
 | 提 PR 前：类型检查、单元测试 | `pnpm gate:l1` |

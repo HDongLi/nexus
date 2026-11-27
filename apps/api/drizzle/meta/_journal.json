@@ -8,6 +8,13 @@
       "when": 1795674555677,
       "tag": "0000_event_log",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1795748921767,
+      "tag": "0001_identity",
+      "breakpoints": true
     }
   ]
 }

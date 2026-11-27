@@ -33,10 +33,27 @@ export function route<P extends string, R extends Omit<RouteConfig, "path"> & { 
   return { access, route: createRoute(config) };
 }
 
-/** 把一条声明好的路由接到处理函数上。 */
+/** 处理函数可以交回的东西：这条路由声明过的那几种回应，或者任何一个 Response（失败回应就是后者）。 */
+export type HandlerReturn<R extends RouteConfig> =
+  | ReturnType<RouteHandler<R, AppEnv>>
+  | Response
+  | Promise<Response>;
+
+/**
+ * 把一条声明好的路由接到处理函数上。
+ *
+ * 成功的回应仍然按路由声明查类型：c.json 回的正文和状态码对不上声明，这里就编译不过。
+ * 失败的回应（fail() 回的）在类型上放宽成 Response。生成器给每条路由算出来的回应类型，是它把
+ * 契约的正文再转成一遍 JSON 安全形状的结果，和统一失败形状的原始类型互相赋不上；而 errors() 声明的
+ * 那些状态码本来也不在这份类型里，所以收紧它换不来任何检查（2026-11-27，身份模块第一次让处理函数回失败时实测）。
+ */
 export function bind<R extends RouteConfig>(
   declared: DeclaredRoute<R>,
-  handler: RouteHandler<R, AppEnv>,
+  handler: (c: Parameters<RouteHandler<R, AppEnv>>[0]) => HandlerReturn<R>,
 ): RouteBinding<R> {
-  return { access: declared.access, route: declared.route, handler };
+  return {
+    access: declared.access,
+    route: declared.route,
+    handler: handler as RouteHandler<R, AppEnv>,
+  };
 }

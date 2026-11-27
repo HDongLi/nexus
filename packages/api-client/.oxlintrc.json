@@ -1,0 +1,10 @@
+{
+  "overrides": [
+    {
+      "files": ["src/schema.d.ts"],
+      "rules": {
+        "max-lines": "off"
+      }
+    }
+  ]
+}

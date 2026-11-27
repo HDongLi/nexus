@@ -13,7 +13,7 @@ export const docRoute = route("admin", {
   tags: ["system"],
   responses: {
     200: json(openApiDocumentSchema, "整份契约文档"),
-    ...errors(401, 403, 501, 500),
+    ...errors(401, 403, 500),
   },
 });
 
