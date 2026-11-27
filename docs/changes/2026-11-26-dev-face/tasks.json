@@ -217,5 +217,35 @@
       "docs/changes/2026-11-26-dev-face/tasks.json",
       "AGENTS.md"
     ]
+  },
+  {
+    "id": "T-0021",
+    "title": "规格：AI 会话与沙盒",
+    "domain": "sessions",
+    "depends_on": ["T-0011", "T-0016"],
+    "scope": [
+      "docs/spec/ai-sessions.md",
+      "docs/parity/backlog.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json"
+    ],
+    "acceptance": ["规格里每条要求都有来源和验收方式", "全文不含内部名称与真实账号名"],
+    "context": [
+      "docs/charter.md",
+      "AGENTS.md",
+      "docs/changes/2026-11-26-dev-face/proposal.md",
+      "docs/parity/SCHEMA.md",
+      "docs/parity/backlog.md",
+      "docs/parity/routes.csv",
+      "docs/parity/parts/d-devflow.jsonl",
+      "docs/parity/decisions.md",
+      "docs/parity/workers.md",
+      "docs/spec/identity.md",
+      "docs/spec/projects.md",
+      "docs/spec/people.md",
+      "docs/adr/0001-技术栈版本复核.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0003-工具链约定与质量闸.md",
+      "docs/adr/0004-视觉语言.md"
+    ]
   }
 ]
