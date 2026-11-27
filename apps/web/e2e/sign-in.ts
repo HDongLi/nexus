@@ -1,25 +1,8 @@
 // Signing in the way a person does: the login page, the two fields, the button.
+import type { Page } from "@playwright/test";
 import { ACCOUNTS, type Credentials } from "./accounts.ts";
 
-/**
- * The part of a page signing in needs. Playwright's Page has it.
- * Like watch.ts, this file does not import the test runner: the architecture gate lets only
- * *.spec.ts, *.test.ts and *.config.ts files reach development dependencies.
- */
-interface SignInPage {
-  goto(url: string): Promise<unknown>;
-  getByLabel(text: string, options?: { exact?: boolean }): { fill(value: string): Promise<void> };
-  getByRole(
-    role: "button",
-    options: { name: string | RegExp; exact?: boolean },
-  ): { click(): Promise<void>; waitFor(options?: { timeout?: number }): Promise<void> };
-  waitForURL(url: (url: URL) => boolean, options?: { timeout?: number }): Promise<void>;
-}
-
-export async function signIn(
-  page: SignInPage,
-  account: Credentials = ACCOUNTS.main,
-): Promise<void> {
+export async function signIn(page: Page, account: Credentials = ACCOUNTS.main): Promise<void> {
   await page.goto("/login");
   await fillLoginForm(page, account);
   await page.getByRole("button", { name: "登录", exact: true }).click();
@@ -30,7 +13,7 @@ export async function signIn(
 
 /** Fills the login form without submitting. */
 export async function fillLoginForm(
-  page: Pick<SignInPage, "getByLabel">,
+  page: Pick<Page, "getByLabel">,
   account: Credentials,
 ): Promise<void> {
   await page.getByLabel("用户名").fill(account.username);

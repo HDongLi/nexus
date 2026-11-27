@@ -20,9 +20,11 @@ const onlyPublicInterface = moduleNames.map((name) => ({
   to: { path: `^modules/${name}/(?!index\\.ts$)` },
 }));
 
+// 测试与配置文件可以引用开发依赖。端到端目录整个都是测试代码：里面的辅助文件（登录、监视、起服务）
+// 名字不带 .spec，同样可以（2026-11-27 修：原先只认文件名后缀，辅助文件只好手写类型绕过去）。
 const notTestOrConfig = {
   path: "^(apps|modules|packages)/",
-  pathNot: "\\.(test|spec|config)\\.[cm]?[jt]sx?$",
+  pathNot: "^apps/[^/]+/e2e/|\\.(test|spec|config)\\.[cm]?[jt]sx?$",
 };
 
 export default {

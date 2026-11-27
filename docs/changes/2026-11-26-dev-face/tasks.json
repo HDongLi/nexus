@@ -247,5 +247,23 @@
       "docs/adr/0003-工具链约定与质量闸.md",
       "docs/adr/0004-视觉语言.md"
     ]
+  },
+  {
+    "id": "T-0022",
+    "title": "修正：架构闸放行端到端目录",
+    "domain": "tools",
+    "depends_on": ["T-0013"],
+    "scope": [
+      "packages/config/dependency-cruiser.mjs",
+      "apps/web/e2e/**",
+      "docs/changes/2026-11-26-dev-face/tasks.json"
+    ],
+    "acceptance": [
+      "pnpm run arch",
+      "pnpm --filter @nexus/web typecheck",
+      "pnpm gate:l3",
+      "pnpm verify"
+    ],
+    "context": ["AGENTS.md", "docs/changes/2026-11-26-dev-face/tasks.json"]
   }
 ]
