@@ -139,11 +139,13 @@
 
 | 事件 | 什么时候发 | `subject` | payload 的键 |
 |---|---|---|---|
-| `identity.login.succeeded` | 登录成功 | 用户名 | `ip` |
-| `identity.login.failed` | 用户名或口令不对；锁定中被拒；停用账号口令正确 | 提交的用户名 | `ip`、`reason`（`invalid_credentials`、`locked_out`、`account_disabled` 三者之一） |
-| `identity.logout` | 退出成功 | 用户名 | `ip` |
-| `identity.password.changed` | 改密成功 | 用户名 | `ip`、`revokedSessions`（被吊销的其它会话数） |
+| `identity.login.succeeded` | 登录成功 | 用户名 | `userId`、`ip` |
+| `identity.login.failed` | 用户名或口令不对；锁定中被拒；停用账号口令正确 | 提交的用户名 | `ip`、`reason`（`invalid_credentials`、`locked_out`、`account_disabled` 三者之一）。不带 `userId`：失败时未必有这个人 |
+| `identity.logout` | 退出成功 | 用户名 | `userId`、`ip` |
+| `identity.password.changed` | 改密成功 | 用户名 | `userId`、`ip`、`revokedSessions`（被吊销的其它会话数） |
 | `identity.user.created` | 命令行建号成功 | 用户名 | `userId`、`isAdmin`、`via`（这一片只有 `cli`） |
+
+由人触发的写事件都带 `userId`：`subject` 里的用户名是给人看的，以后可能允许改；编号才是不变的，别的模块对账、审计查询都用它（2026-11-27 编排者补，和工程规格同一条规矩）。
 
 | 编号 | 要求 | 来源 | 验收 |
 |---|---|---|---|
