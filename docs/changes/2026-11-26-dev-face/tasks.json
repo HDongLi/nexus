@@ -265,5 +265,18 @@
       "pnpm verify"
     ],
     "context": ["AGENTS.md", "docs/changes/2026-11-26-dev-face/tasks.json"]
+  },
+  {
+    "id": "T-0023",
+    "title": "工具：重闸全机器互斥",
+    "domain": "tools",
+    "depends_on": [],
+    "scope": ["tools/gates/**", "AGENTS.md", "docs/changes/2026-11-26-dev-face/tasks.json"],
+    "acceptance": ["node --test \"tools/gates/*.test.ts\"", "pnpm gate:l1", "pnpm verify"],
+    "context": [
+      "AGENTS.md",
+      "docs/adr/0003-工具链约定与质量闸.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json"
+    ]
   }
 ]

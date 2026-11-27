@@ -1,6 +1,7 @@
 // Shared runner for the four gate levels (charter §6.5).
 // 2026-11-26: one place that runs commands in order, times each, and prints one table.
 import { spawn } from "node:child_process";
+import { withHeavyGateLock } from "./lock.ts";
 
 export interface Step {
   name: string;
@@ -17,7 +18,24 @@ interface Row {
   ok: boolean;
 }
 
+/** 要排队的闸：分钟级的两道，吃满处理器的那种。L0、L1 是秒级的，并排跑无妨。 */
+const EXCLUSIVE_LEVELS = new Set(["L2", "L3"]);
+
 export async function runGate(level: string, title: string, steps: Step[]): Promise<number> {
+  const run = (): Promise<number> => runSteps(level, title, steps);
+  // 只有一路在跑的场合（持续集成里的一个任务）可以关掉排队：NEXUS_GATE_LOCK=off。
+  if (!EXCLUSIVE_LEVELS.has(level) || process.env.NEXUS_GATE_LOCK === "off") return run();
+  try {
+    // 2026-11-27：同一台机器上几个工作区、几个代理同时跑重闸会互相拖垮（集成测试死在准备阶段的超时上），
+    // 所以重闸排队。等的时间不算在步骤的预算里：拿锁发生在第一步之前。
+    return await withHeavyGateLock(level, run);
+  } catch (error) {
+    console.log(`\n== ${level} 没跑：${(error as Error).message}`);
+    return 1;
+  }
+}
+
+async function runSteps(level: string, title: string, steps: Step[]): Promise<number> {
   console.log(`\n== ${level} ${title}`);
   const started = Date.now();
   const rows: Row[] = [];
