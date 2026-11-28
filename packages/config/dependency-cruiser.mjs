@@ -86,13 +86,15 @@ export default {
       from: { path: "^modules/[^/]+/routes\\.ts$" },
       to: { path: "^modules/[^/]+/(repo|schema)\\.ts$" },
     },
-    {
-      name: "schema-depends-on-nothing-internal",
+    // 一个模块一条：只拦「伸进自己模块的内部」。写成一条不限模块的规则，会把别的模块走出口的
+    // 合法引用也拦下——工程表对身份出口的引用是设计定下的（2026-11-28 修，T-0024）。
+    ...moduleNames.map((name) => ({
+      name: `module-${name}-schema-depends-on-nothing-internal`,
       severity: "error",
       comment: "表定义不依赖本模块的用例、仓储、路由和出口，免得类型链成环。",
-      from: { path: "^modules/[^/]+/schema\\.ts$" },
-      to: { path: "^modules/[^/]+/(repo|service|routes|index)\\.ts$" },
-    },
+      from: { path: `^modules/${name}/schema\\.ts$` },
+      to: { path: `^modules/${name}/(repo|service|routes|index)\\.ts$` },
+    })),
     {
       name: "sql-only-in-repo-and-schema",
       severity: "error",

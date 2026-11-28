@@ -278,5 +278,21 @@
       "docs/adr/0003-工具链约定与质量闸.md",
       "docs/changes/2026-11-26-dev-face/tasks.json"
     ]
+  },
+  {
+    "id": "T-0024",
+    "title": "修正：架构闸的表定义规则按模块限定",
+    "domain": "tools",
+    "depends_on": ["T-0017"],
+    "scope": [
+      "packages/config/dependency-cruiser.mjs",
+      "docs/changes/2026-11-26-dev-face/tasks.json"
+    ],
+    "acceptance": ["pnpm run arch", "pnpm gate:l0", "pnpm gate:l1"],
+    "context": [
+      "AGENTS.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md"
+    ]
   }
 ]
