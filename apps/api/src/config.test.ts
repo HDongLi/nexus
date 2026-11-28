@@ -1,5 +1,26 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { loadConfig, parsePublicOrigin } from "./config.ts";
+
+describe("工程仓库的根目录（规格 P-23）", () => {
+  it("不配就是 <DATA_DIR>/projects；数据目录挪了它跟着挪", () => {
+    expect(loadConfig({}).PROJECTS_ROOT).toBe(join(".data", "projects"));
+    expect(loadConfig({ DATA_DIR: "/srv/nexus" }).PROJECTS_ROOT).toBe(
+      join("/srv/nexus", "projects"),
+    );
+  });
+
+  it("配了就用配的，不看数据目录", () => {
+    expect(loadConfig({ PROJECTS_ROOT: "/srv/repos" }).PROJECTS_ROOT).toBe("/srv/repos");
+    expect(loadConfig({ PROJECTS_ROOT: "/srv/repos", DATA_DIR: "/elsewhere" }).PROJECTS_ROOT).toBe(
+      "/srv/repos",
+    );
+  });
+
+  it("留空算配错：启动即失败，并点名是哪一项", () => {
+    expect(() => loadConfig({ PROJECTS_ROOT: "" })).toThrow(/PROJECTS_ROOT/);
+  });
+});
 
 describe("口令最短长度（规格 I-32）", () => {
   it("缺省是 8", () => {

@@ -118,6 +118,8 @@ export { argon2PasswordHasher } from "./password.ts";
 export type { Argon2, PasswordHasher } from "./password.ts";
 export { createIdentityRepo } from "./repo.ts";
 export { createIdentityService } from "./service.ts";
+// 账号表的定义随出口导出（2026-11-27，开发面重置第 2 片）：只给别的模块建引用约束用，别的模块不在它上面读写数据。
+export { identityUsers } from "./schema.ts";
 export type { LoginFailedReason } from "./events.ts";
 export type {
   AuthenticatedSession,

@@ -233,6 +233,9 @@ importers:
       '@nexus/identity':
         specifier: workspace:*
         version: link:../../modules/identity
+      '@nexus/projects':
+        specifier: workspace:*
+        version: link:../../modules/projects
       '@nexus/system':
         specifier: workspace:*
         version: link:../../modules/system
@@ -347,6 +350,40 @@ importers:
       argon2:
         specifier: ^0.45.2
         version: 0.45.2
+      drizzle-orm:
+        specifier: ^0.45.4
+        version: 0.45.4(@electric-sql/pglite@0.6.0)(@types/pg@8.23.1)(pg@8.23.1)
+      hono:
+        specifier: ^4.13.22
+        version: 4.13.22
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      vitest:
+        specifier: 5.1.1
+        version: 5.1.1(@types/node@24.19.2)(vite@8.3.8(@types/node@24.19.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
+
+  modules/projects:
+    dependencies:
+      '@hono/zod-openapi':
+        specifier: ^1.6.3
+        version: 1.6.3(hono@4.13.22)(zod@4.6.7)
+      '@nexus/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@nexus/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@nexus/event-log':
+        specifier: workspace:*
+        version: link:../event-log
+      '@nexus/http-kit':
+        specifier: workspace:*
+        version: link:../../packages/http-kit
+      '@nexus/identity':
+        specifier: workspace:*
+        version: link:../identity
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@electric-sql/pglite@0.6.0)(@types/pg@8.23.1)(pg@8.23.1)

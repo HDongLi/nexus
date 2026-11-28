@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { z } from "zod";
 
 /**
@@ -23,9 +24,19 @@ const schema = z.object({
   PUBLIC_ORIGIN: z.string().trim().optional(),
   /** 口令最短长度。改密和建号都查它。只查长度，不查字符种类（规格 I-32）。 */
   PASSWORD_MIN_LENGTH: z.coerce.number().int().min(1).max(128).default(8),
+  /**
+   * 工程的裸仓库放在哪（规格 P-23）。不给就是 `<DATA_DIR>/projects`。
+   * 留空算配错、起不来：一个空的路径配置多半是从模板抄下来忘了填，按「没给」处理会把仓库悄悄放进数据目录。
+   */
+  PROJECTS_ROOT: z.string().min(1).optional(),
 });
 
-export type Config = z.output<typeof schema>;
+/** 工程仓库根目录的缺省值：数据目录下的 projects（规格 P-23）。 */
+export function defaultProjectsRoot(dataDir: string): string {
+  return join(dataDir, "projects");
+}
+
+export type Config = z.output<typeof schema> & { PROJECTS_ROOT: string };
 
 /**
  * 校验对外地址：http 或 https、有主机名、不带路径、查询串、片段和账号（规格 I-38）。
@@ -61,5 +72,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
   } catch (err) {
     throw new Error(`环境变量不合法：\nPUBLIC_ORIGIN: ${(err as Error).message}`, { cause: err });
   }
-  return { ...parsed.data, PUBLIC_ORIGIN: publicOrigin };
+  return {
+    ...parsed.data,
+    PUBLIC_ORIGIN: publicOrigin,
+    PROJECTS_ROOT: parsed.data.PROJECTS_ROOT ?? defaultProjectsRoot(parsed.data.DATA_DIR),
+  };
 }

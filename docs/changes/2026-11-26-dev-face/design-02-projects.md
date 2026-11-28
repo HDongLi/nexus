@@ -20,7 +20,7 @@
 |---|---|
 | `modules/projects` | 四条路由的声明、用例、仓储、一张表、两个事件、git 执行器、可见性判定、测试。骨架用 `pnpm new:module projects --title <一句话>` 起 |
 | `modules/identity` | 出口多导出一样：`identityUsers` 表定义，只给别的模块建引用约束用；模块卡记一笔 |
-| `apps/api` | 组合根把工程模块挂上；配置里加 `PROJECTS_ROOT`；启动时把目录建出来；契约来源加一行 |
+| `apps/api` | 组合根把工程模块挂上；配置里加 `PROJECTS_ROOT`；启动时把目录建出来；契约来源加一行；建表的迁移是 `drizzle/0002_projects.sql` |
 | `apps/web` | 工程页：清单、新建、详情、改显示名和头像字。归任务卡 T-0018，不在后端这一张卡里 |
 
 ## 和身份模块的关系
@@ -40,8 +40,10 @@
 |---|---|---|---|---|
 | `GET /api/v1/projects` | user | 看得见的工程，新的在前 | 200 `{ projects: Project[] }` | 401、500 |
 | `POST /api/v1/projects` | user | 新建 | 201 `{ project }`，仓库已可用 | 400 `invalid_request`；409 `projects_slug_taken`；500 `projects_creation_failed` |
-| `GET /api/v1/projects/{projectId}` | user | 详情 | 200 `{ project: ProjectDetail }` | 404 `not_found`；500 |
+| `GET /api/v1/projects/{projectId}` | user | 详情 | 200 `{ project: ProjectDetail }` | 404 `not_found`；500 `internal_error`（读不到提交） |
 | `PATCH /api/v1/projects/{projectId}` | user | 改显示名、头像字 | 200 `{ project }` | 400；403 `projects_forbidden`；404 |
+
+失败栏只列模块自己回的。四条都是 user 级，全站的两道闸排在模块前面：没登录回 401 `auth_required`；新建和改会改状态，还要过来源校验，不过回 403。接口文档里四条操作把这两样都声明了，和这张表对着看时原先少了两样（2026-11-28 实现时补）。
 
 ```ts
 project       = { id, slug, displayName, avatar, createdById, createdAt, updatedAt }
@@ -86,6 +88,8 @@ patchRequest  = { displayName?, avatar? }   // 至少带一个；带 slug 一律
 
 一次 git：`git --git-dir=<裸仓库> log -1 --format=%H%n%cI%n%s main`。失败或超时回 500 `internal_error`，不回一个 `head` 为空的详情。
 
+`committedAt` 是提交者的时间，接口上换算成 UTC 的 ISO 8601，和记录上的两个时间一个口径：git 报的是提交者本地的偏移，页面不必为它另写一条格式化（2026-11-28 实现时定）。
+
 ## 显示名与头像字
 
 - 显示名：去掉首尾空白后 0 到 40 个码点，不含控制字符。头像字：0 到 2 个码点，不含空白和控制字符。超长不截断，回 400。
@@ -99,6 +103,8 @@ patchRequest  = { displayName?, avatar? }   // 至少带一个；带 slug 一律
 
 看不见和不存在回得一样，都是 404。
 
+这一片的清单是整表读出后逐条问判定；判定是同步的，只看记录上的创建人和调用者的管理员位。工程多了、或者判定要查关系表时，这个形状要换成能下推到 SQL 的，第 3 片定（2026-11-28 实现时记）。
+
 ## 事件
 
 走事件日志，`source` 是 `projects`，`subject` 是工程编号，和写入在同一个事务里。
@@ -110,7 +116,7 @@ patchRequest  = { displayName?, avatar? }   // 至少带一个；带 slug 一律
 
 ## 配置
 
-`PROJECTS_ROOT`：不给就是 `<DATA_DIR>/projects`。启动时目录不在就建出来，建不出来就启动失败。
+`PROJECTS_ROOT`：不给就是 `<DATA_DIR>/projects`。启动时目录不在就建出来，建不出来就启动失败，原因写到标准错误。给了但是空串算配错，同样起不来：空串多半是模板没填，按「没给」处理会把仓库悄悄放进数据目录（2026-11-28 实现时定）。
 
 ## 页面
 
@@ -135,6 +141,9 @@ patchRequest  = { displayName?, avatar? }   // 至少带一个；带 slug 一律
 | 详情的 `head`；读不到提交回 500 | 集成测试 |
 | 两个事件的时机和内容；和写入同一个事务 | 集成测试 |
 | 响应和事件里没有服务器路径 | 集成测试 |
+| 启动时把仓库根目录建出来；建不出来就拒绝启动，原因在标准错误里 | 集成测试，起一次真的后端进程 |
 | 真浏览器：新建后清单第一行就是它；改显示名后清单跟着变；重名的原因常显 | 端到端（T-0018） |
 
 新建要跑几条 git，耗时任务书还没有量过。实现时在集成测试里记下本机实测值（新建接口从收到请求到回 201），写进模块卡；超过写接口的预算（p95 不超过 200 毫秒）的话，在这里写明并留给决策记录处理。
+
+**实现实测（2026-11-27，任务卡 T-0017）**：超过了。本机平静时中位数 303 毫秒、p95 323 毫秒；次日交付前复测一轮是中位数 401 毫秒、p95 465 毫秒；另有测试并行跑、处理器占满时 p95 640 毫秒。时间基本花在起四回 git 进程上。细目和两条可能的出路见[模块卡](../../../modules/projects/module.md)的「实测」一节；怎么处理留给决策记录。

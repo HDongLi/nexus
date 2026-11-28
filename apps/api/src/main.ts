@@ -3,6 +3,7 @@ import { composeApp } from "./compose.ts";
 import { openDatabase } from "./database.ts";
 import { loadConfig } from "./config.ts";
 import { listenWithFallback, type Listening } from "./listen.ts";
+import { ensureProjectsRoot } from "./projects-root.ts";
 import { VERSION } from "./version.ts";
 
 /** 停止时最多等这么久，超时强制退出，不留僵尸进程（实弹条款 15）。 */
@@ -16,6 +17,9 @@ async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const log = pino({ level: config.LOG_LEVEL, base: { service: "api", version: VERSION } });
 
+  // 工程仓库的根目录不在就建出来；建不出来就不往下走，原因由下面 main().catch 写到标准错误（规格 P-23）。
+  await ensureProjectsRoot(config.PROJECTS_ROOT);
+
   const database = await openDatabase(config);
   log.info({ database: database.kind }, "数据库就绪");
 
@@ -27,6 +31,7 @@ async function main(): Promise<void> {
     runtime: process.version,
     publicOrigin: config.PUBLIC_ORIGIN,
     passwordMinLength: config.PASSWORD_MIN_LENGTH,
+    projectsRoot: config.PROJECTS_ROOT,
   });
   const { server, port } = await listenWithFallback(
     app,

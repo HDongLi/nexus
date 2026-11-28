@@ -8,6 +8,17 @@ import {
   type IdentityRepo,
 } from "@nexus/identity";
 import {
+  createGitRunner,
+  createProjectsModule,
+  createProjectsRepo,
+  ownerOrAdmin,
+  projectsContract,
+  type GitRunner,
+  type ProjectRepo,
+  type ProjectsModule,
+  type Visibility,
+} from "@nexus/projects";
+import {
   createSystemModule,
   createSystemRepo,
   systemContract,
@@ -19,6 +30,16 @@ import { createApp } from "./app.ts";
 import { clientIp } from "./http/client-ip.ts";
 import { createIdentityVerifier } from "./http/identity-verifier.ts";
 
+/** 工程模块的可替换件。不给就是真的；集成测试换进来（规格 P-10、P-20、P-22）。 */
+export interface ProjectsOptions {
+  /** 可见性判定：比如换成恒假、恒真。 */
+  canSee?: Visibility;
+  /** git 执行器：比如换成会失败、会挂起的桩。 */
+  git?: GitRunner;
+  /** 仓储：换成写入之后故意抛错的，验事件跟着回滚、刚建的仓库被扔掉（规格 P-20）。 */
+  repo?: ProjectRepo;
+}
+
 export interface ComposeInput {
   db: Db;
   log: Logger;
@@ -27,10 +48,14 @@ export interface ComposeInput {
   /** 对外地址（配置项 PUBLIC_ORIGIN），启动时校验过。没配就按请求自己的地址比对来源。 */
   publicOrigin?: string | undefined;
   passwordMinLength: number;
+  /** 配置项 PROJECTS_ROOT。启动时已经建好；集成测试指到临时目录。 */
+  projectsRoot: string;
   /** 当前时间。测试拨表用，不给就是系统时钟。 */
   now?: () => Date;
   /** 身份模块的仓储。不给就是真的；集成测试换一份进来，比如写入之后故意抛错，验事件跟着回滚（规格 I-41）。 */
   repo?: IdentityRepo;
+  /** 工程模块的可替换件。不给就是真的。 */
+  projects?: ProjectsOptions;
 }
 
 export interface Composed {
@@ -38,6 +63,7 @@ export interface Composed {
   eventLog: EventLog;
   system: SystemModule;
   identity: IdentityModule;
+  projects: ProjectsModule;
   /** 这一轮启动的编号，把这一轮的日志和事件串起来。 */
   bootId: string;
 }
@@ -70,15 +96,29 @@ export async function composeApp(input: ComposeInput): Promise<Composed> {
     ...clock,
   });
 
+  // 这一片的可见性是「管理员或创建者」；第 3 片换成带用户组的实现时只改这里（规格 P-10）。
+  const projects = createProjectsModule({
+    db: input.db,
+    repo: input.projects?.repo ?? createProjectsRepo(),
+    eventLog,
+    root: input.projectsRoot,
+    git: input.projects?.git ?? createGitRunner(),
+    canSee: input.projects?.canSee ?? ownerOrAdmin,
+    // 建仓失败时模块要把底层原因连同请求号写进日志（规格 P-05）。
+    log: input.log,
+    ...clock,
+  });
+
   const { app } = createApp({
     log: input.log,
     modules: [
       { name: systemContract.name, bindings: system.bindings },
       { name: identityContract.name, bindings: identity.bindings },
+      { name: projectsContract.name, bindings: projects.bindings },
     ],
     verify: createIdentityVerifier(identity),
     publicOrigin: input.publicOrigin,
   });
 
-  return { app, eventLog, system, identity, bootId };
+  return { app, eventLog, system, identity, projects, bootId };
 }

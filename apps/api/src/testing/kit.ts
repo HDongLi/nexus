@@ -6,9 +6,11 @@ import {
   type UserRecord,
 } from "@nexus/identity";
 import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql, type SQL } from "drizzle-orm";
 import { pino, type Logger } from "pino";
-import { composeApp, type ComposeInput, type Composed } from "../compose.ts";
+import { composeApp, type ComposeInput, type Composed, type ProjectsOptions } from "../compose.ts";
 import { migrationsFolder } from "../database.ts";
 
 /**
@@ -20,6 +22,13 @@ import { migrationsFolder } from "../database.ts";
 export const PAGE_ORIGIN = "http://127.0.0.1:4261";
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const T0 = new Date("2026-11-27T00:00:00.000Z");
+
+/**
+ * 没指明仓库根目录时的落点：系统临时目录下一个按进程号命名的路径，不建出来。
+ * 这些用例不建工程，工程模块在清单、详情、改之外也不碰这个目录；
+ * 要建工程的用例自己指一个临时目录进来（testing/projects.ts）。
+ */
+const unusedProjectsRoot = join(tmpdir(), `nexus-api-tests-${String(process.pid)}`, "projects");
 
 export interface Clock {
   now(): Date;
@@ -65,6 +74,10 @@ export async function boot(options: {
   publicOrigin?: string | undefined;
   passwordMinLength?: number;
   repo?: IdentityRepoInput;
+  /** 工程仓库的根目录。建工程的用例必须指一个临时目录进来。 */
+  projectsRoot?: string;
+  /** 工程模块的可替换件：可见性判定、git 执行器、仓储。 */
+  projects?: ProjectsOptions;
 }): Promise<TestApp> {
   const time = options.clock ?? clock();
   const memory = options.log ?? memoryLog();
@@ -76,7 +89,9 @@ export async function boot(options: {
     publicOrigin: options.publicOrigin,
     passwordMinLength: options.passwordMinLength ?? 8,
     now: time.now,
+    projectsRoot: options.projectsRoot ?? unusedProjectsRoot,
     ...(options.repo === undefined ? {} : { repo: options.repo }),
+    ...(options.projects === undefined ? {} : { projects: options.projects }),
   });
   return { ...composed, clock: time, log: memory };
 }

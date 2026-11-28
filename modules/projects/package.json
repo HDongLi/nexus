@@ -1,0 +1,29 @@
+{
+  "name": "@nexus/projects",
+  "version": "0.0.0",
+  "private": true,
+  "description": "工程：记录、平台建的裸仓库、看得见谁、显示名与头像字",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@hono/zod-openapi": "^1.6.3",
+    "@nexus/contracts": "workspace:*",
+    "@nexus/db": "workspace:*",
+    "@nexus/event-log": "workspace:*",
+    "@nexus/http-kit": "workspace:*",
+    "@nexus/identity": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.22",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "vitest": "5.1.1"
+  }
+}

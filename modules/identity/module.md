@@ -31,6 +31,7 @@
 
 - `sessionCookie.set(c, 令牌)`、`sessionCookie.clear(c)`：cookie 的属性只有这一份，访问闸续期之后也从这里拿。
 - `authErrorCodes`：身份这件事的九个失败码。应用层的访问闸和来源校验从这里拿，不另写字面量。
+- `identityUsers`：账号表的定义，2026-11-27 起随出口导出。只给别的模块建引用约束用：工程模块的 `projects.created_by_id` 指向它（`ON DELETE RESTRICT`，建过工程的账号因此删不掉）。别的模块不在它上面读写数据；要读账号，走用例。
 - 依赖全部由创建函数传进来：数据库、仓储、事件日志、口令最短长度。`now` 拨表，`password` 换成计数桩，测试靠这两样不真等、不真算。
 - 路由（声明在 `routes.ts`，只依赖 `@nexus/http-kit` 和 `zod`）：
 

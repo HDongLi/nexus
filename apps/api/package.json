@@ -23,6 +23,7 @@
     "@nexus/event-log": "workspace:*",
     "@nexus/http-kit": "workspace:*",
     "@nexus/identity": "workspace:*",
+    "@nexus/projects": "workspace:*",
     "@nexus/system": "workspace:*",
     "drizzle-orm": "^0.45.4",
     "hono": "^4.13.22",
