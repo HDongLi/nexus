@@ -5,6 +5,7 @@ export { DescriptionDetail, DescriptionList, DescriptionTerm } from "./descripti
 export { Dialog } from "./dialog.tsx";
 export type { DialogProps } from "./dialog.tsx";
 export { InlineCode } from "./inline-code.tsx";
+export { ItemAvatar, ItemList, ItemMain, ItemMeta, itemRowClass } from "./list.tsx";
 export { Menu, MenuItem, MenuRadioItem } from "./menu.tsx";
 export type { MenuItemProps, MenuProps, MenuTriggerProps } from "./menu.tsx";
 export { Notice } from "./notice.tsx";

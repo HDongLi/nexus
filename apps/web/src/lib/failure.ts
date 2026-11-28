@@ -63,6 +63,16 @@ export function explainFailure(failure: ApiFailure, details: FailureDetails = {}
       return { title: "新口令和旧口令一样", detail: "换一个没用过的口令。" };
     case "invalid_request":
       return { title: "提交的内容不合法", detail: failure.message };
+    case "projects_slug_taken":
+      return { title: "短名已被占用", detail: "换一个短名再试。" };
+    case "projects_forbidden":
+      return { title: "权限不够", detail: "只有创建者和管理员能改这个工程。" };
+    case "projects_creation_failed":
+      return {
+        title: "工程没有建成",
+        detail: "仓库没有建起来，什么都没有留下。稍后再试；还不行带请求号找管理员。",
+        requestId: failure.requestId,
+      };
     case "not_found":
       return { title: "找不到", detail: "这条内容可能已经被删掉了。" };
     case "network_error":

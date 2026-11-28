@@ -73,7 +73,7 @@ export function AppShell({ sidebar, children }: { sidebar: ReactNode; children: 
             type="button"
             tabIndex={-1}
             aria-label="收起导航"
-            className="fixed inset-0 z-30 bg-black/30"
+            className="fixed inset-0 z-30 bg-overlay"
             onClick={() => setNavOpen(false)}
           />
         ) : null}

@@ -25,6 +25,12 @@ export const ACCOUNTS = {
     nextPassword: "new-password-2",
     admin: false,
   },
+  /**
+   * For the projects spec: a colleague who has created nothing and belongs to no group, so the
+   * projects the main account creates stay invisible to him (spec P-38, the empty list). Has his
+   * own account rather than sharing the password one, whose password changes mid-run.
+   */
+  other: { username: "e2e_other", password: "other-password-1", admin: false },
 } as const;
 
-export const ALL_ACCOUNTS: readonly Account[] = [ACCOUNTS.main, ACCOUNTS.password];
+export const ALL_ACCOUNTS: readonly Account[] = [ACCOUNTS.main, ACCOUNTS.password, ACCOUNTS.other];

@@ -107,7 +107,7 @@ export function Dialog({
         if (event.key === "Escape") event.stopPropagation();
       }}
       className={cn(
-        "m-auto max-h-dvh w-full max-w-md overflow-y-auto border-0 bg-transparent p-4 backdrop:bg-black/40",
+        "m-auto max-h-dvh w-full max-w-md overflow-y-auto border-0 bg-transparent p-4 backdrop:bg-overlay",
         "animate-pop-in backdrop:animate-fade-in motion-reduce:animate-none motion-reduce:backdrop:animate-none",
         className,
       )}

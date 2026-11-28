@@ -110,6 +110,10 @@
   --input: rgba(15, 17, 21, 0.14);
   --ring: rgba(43, 89, 195, 0.5);
 
+  /* 浮在页面之上的东西背后那一层暗罩。对话框和窄屏的导航抽屉共用一个值：
+     同一个「把页面压暗、把浮面托出来」的概念不该有两个浓度（第 1 片审查 D-03）。 */
+  --overlay: rgba(0, 0, 0, 0.4);
+
   /* 层次：细描边（半像素的一圈）加两层柔影，透明度都在 5% 以内。 */
   --hairline: rgba(15, 17, 21, 0.07);
   --elevation-soft:
@@ -196,6 +200,7 @@
   --color-border-strong: var(--border-strong);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
 
   --shadow-soft: var(--elevation-soft);
   --shadow-panel: var(--elevation-panel);

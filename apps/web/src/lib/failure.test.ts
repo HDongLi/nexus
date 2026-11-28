@@ -93,6 +93,22 @@ describe("把失败翻成给人看的话", () => {
     ).toBe("名字太长");
   });
 
+  it("工程域的三个码各有自己的说法（docs/spec/projects.md 错误码表）", () => {
+    expect(explainFailure(failure({ status: 409, code: "projects_slug_taken" }))).toEqual({
+      title: "短名已被占用",
+      detail: "换一个短名再试。",
+    });
+    expect(explainFailure(failure({ status: 403, code: "projects_forbidden" }))).toEqual({
+      title: "权限不够",
+      detail: "只有创建者和管理员能改这个工程。",
+    });
+    const creation = explainFailure(failure({ status: 500, code: "projects_creation_failed" }));
+    expect(creation.title).toBe("工程没有建成");
+    // 建仓失败是服务器的事，要找管理员，带请求号。
+    expect(creation.requestId).toBe("r-1");
+    expect(creation.detail).toContain("没有留下");
+  });
+
   it("不认识的 4xx 原样转述服务器的话", () => {
     expect(explainFailure(failure({ status: 409, code: "teapot", message: "我是茶壶" }))).toEqual({
       title: "没有成功",

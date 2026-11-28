@@ -7,27 +7,36 @@ import {
   ThemeToggle,
   type ToastItem,
 } from "@nexus/ui-kit";
-import { Link, useMatch } from "@tanstack/react-router";
-import { Activity } from "lucide-react";
+import { Link, useRouterState } from "@tanstack/react-router";
+import { Activity, FolderGit2 } from "lucide-react";
 import { AccountMenu } from "./account-menu.tsx";
 import { BrandMark } from "./brand-mark.tsx";
 import { useCurrentUser } from "../lib/session.ts";
 
-/** 导航。现在只有一组一项；以后的页面按组往里加，侧栏的样子不变。 */
+/**
+ * 导航。平台一组放整个应用都要的页面；开发一组放开发面的业务页，往后第 4、5、6 片按组往里加，
+ * 侧栏的样子不变。exact 为真的一项只在自己那一页亮（首页是所有路径的前缀，必须逐字比）；
+ * 其余的按前缀比：详情页也算在「工程」项里。
+ */
 const NAV_GROUPS = [
   {
     label: "平台",
-    items: [{ to: "/", label: "系统状态", icon: Activity }],
+    items: [{ to: "/", label: "系统状态", icon: Activity, exact: true }],
+  },
+  {
+    label: "开发",
+    items: [{ to: "/projects", label: "工程", icon: FolderGit2, exact: false }],
   },
 ] as const;
 
 type NavItem = (typeof NAV_GROUPS)[number]["items"][number];
 
 /** 导航里的一项：整条是一个链接，当前所在的这一项高亮。 */
-function SidebarLink({ to, label, icon: Icon }: NavItem) {
-  const here = useMatch({ from: to, shouldThrow: false });
+function SidebarLink({ to, label, icon: Icon, exact }: NavItem) {
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const active = exact ? pathname === to : pathname.startsWith(to);
   return (
-    <Link to={to} className={sidebarItemClass({ active: here !== null && here !== undefined })}>
+    <Link to={to} className={sidebarItemClass({ active })}>
       <Icon />
       {label}
     </Link>
