@@ -133,7 +133,7 @@
 | `identity.group.deleted` | 身份 | 组编号 | `groupId`、`actorId`、`name`、`memberCount` |
 | `projects.visibility.changed` | 工程 | 组编号 | `groupId`、`actorId`、`changes`、`cause`（`admin` 或 `project_created`） |
 
-`changes` 只列真变了的键，每个键带 `from` 和 `to`；成员和可见工程是编号的数组，全量记。事件名过契约包的 `eventName`（三段的名字第 1 片已经放行）。
+`changes` 只列真变了的键，每个键带 `from` 和 `to`；成员和可见工程是编号的数组，全量记。事件名过契约包的 `eventName`（三段第 1 片放行，四段这一片放行——`identity.user.password.reset`；五段仍拒，2026-11-29 勘误，见审查 D-02）。
 
 ## 文件怎么分
 

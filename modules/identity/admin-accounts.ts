@@ -132,7 +132,7 @@ export async function createAccount(
 }
 
 /**
- * 改显示名和管理员位（规格 G-13）。查的顺序：找不找得到、形状、值有没有真的变、
+ * 改显示名和管理员位（规格 G-13）。查的顺序：形状（事务外先卡）、找不找得到、值有没有真的变、
  * 会不会失去最后一个管理员（规格 G-20，在写库的事务里锁住再数）、动不动自己（规格 G-19）。
  * 两个 409 都命中时（最后一个管理员动自己），数量那道闸先说——「这次改动会让系统没有
  * 启用的管理员」是更具体的那句话，也让五个失败码在集成测试里都打得到（规格 G-04；
@@ -148,29 +148,32 @@ export async function updateAccount(
   },
 ): Promise<UpdateAccountResult> {
   const { deps } = ctx;
-  const account = await deps.repo.users.findById(deps.db, input.userId);
-  if (!account) return { kind: "not_found" };
   if (input.displayName !== undefined && !displayNameAccepted(input.displayName)) {
     return { kind: "invalid_display_name" };
   }
-  const displayName =
-    input.displayName === undefined ? account.displayName : normalizeDisplayName(input.displayName);
-  const isAdmin = input.isAdmin ?? account.isAdmin;
-  const changes: UserUpdatedChanges = {};
-  if (displayName !== account.displayName) {
-    changes.displayName = { from: account.displayName, to: displayName };
-  }
-  if (isAdmin !== account.isAdmin) changes.isAdmin = { from: account.isAdmin, to: isAdmin };
-  if (changes.displayName === undefined && changes.isAdmin === undefined) {
-    return { kind: "no_change", user: account };
-  }
-
   const at = ctx.now();
-  // 降级会减启用管理员数：先在事务里锁住全部启用的管理员行再数（规格 G-20）。
-  const demotesEnabledAdmin = isAdmin === false && account.isAdmin && account.disabledAt === null;
   const outcome = await deps.db.transaction(async (tx): Promise<UpdateAccountResult> => {
-    if (demotesEnabledAdmin && (await deps.repo.users.lockEnabledAdmins(tx)) <= 1) {
-      return { kind: "last_admin" };
+    // 行的当前值以事务里读到的那次为准（2026-11-29 审查 D-01）：事务外的快照在真库并发下会旧，
+    // 事件的 from、降级判定和返回值都吃这次读。读到与写下之间再有并发提交的残余窗口接受——
+    // 显示名类改动没有行锁可依托，属审计精度不是权限口子（模块卡有记）。
+    const account = await deps.repo.users.findById(tx, input.userId);
+    if (!account) return { kind: "not_found" };
+    const displayName =
+      input.displayName === undefined
+        ? account.displayName
+        : normalizeDisplayName(input.displayName);
+    const isAdmin = input.isAdmin ?? account.isAdmin;
+    const changes: UserUpdatedChanges = {};
+    if (displayName !== account.displayName) {
+      changes.displayName = { from: account.displayName, to: displayName };
+    }
+    if (isAdmin !== account.isAdmin) changes.isAdmin = { from: account.isAdmin, to: isAdmin };
+    if (changes.displayName === undefined && changes.isAdmin === undefined) {
+      return { kind: "no_change", user: account };
+    }
+    // 降级会减启用管理员数：先在事务里锁住全部启用的管理员行再数（规格 G-20）。
+    if (isAdmin === false && account.isAdmin && account.disabledAt === null) {
+      if ((await deps.repo.users.lockEnabledAdmins(tx)) <= 1) return { kind: "last_admin" };
     }
     // 降级自己才叫「动自己」（规格 G-19）；改自己的显示名、把自己升成管理员不在四个动作里。
     if (input.isAdmin === false && isSelf(input.operatorId, input.userId)) {
@@ -211,11 +214,11 @@ export async function resetAccountPassword(
   // 请求体把口令卡在 128；走不到路由的调用（比如将来的脚本）放进更长的，将来登录不了。
   if (input.newPassword.length > MAX_PASSWORD_LENGTH) return { kind: "too_weak" };
 
-  const account = await deps.repo.users.findById(deps.db, input.userId);
-  if (!account) return { kind: "not_found" };
-
   const passwordHash = await ctx.password.hash(input.newPassword);
-  const revokedSessions = await deps.db.transaction(async (tx) => {
+  // 目标行的读取也在事务里（2026-11-29 审查 D-01 同款）：并发删号时不会给一个已经不在的账号发事件。
+  return deps.db.transaction(async (tx): Promise<ResetPasswordResult> => {
+    const account = await deps.repo.users.findById(tx, input.userId);
+    if (!account) return { kind: "not_found" };
     await deps.repo.users.updatePasswordHash(tx, account.id, passwordHash, ctx.now());
     const count = await deps.repo.sessions.deleteAllForUser(tx, account.id);
     await ctx.emit(
@@ -225,9 +228,8 @@ export async function resetAccountPassword(
       { userId: account.id, actorId: input.operatorId, revokedSessions: count },
       input.traceId,
     );
-    return count;
+    return { kind: "ok", revokedSessions: count };
   });
-  return { kind: "ok", revokedSessions };
 }
 
 /**
@@ -240,14 +242,15 @@ export async function setAccountDisabled(
   input: RequestTrace & { operatorId: string; userId: string; disabled: boolean },
 ): Promise<SetDisabledResult> {
   const { deps } = ctx;
-  const account = await deps.repo.users.findById(deps.db, input.userId);
-  if (!account) return { kind: "not_found" };
-  const nowDisabled = account.disabledAt !== null;
-  if (nowDisabled === input.disabled) return { kind: "no_change", user: account };
-
   const at = ctx.now();
-  if (input.disabled) {
-    const outcome = await deps.db.transaction(async (tx): Promise<SetDisabledResult> => {
+  // 停用和启用走同一个事务，目标行以事务里读到的那次为准（同 updateAccount，2026-11-29 审查 D-01）。
+  return deps.db.transaction(async (tx): Promise<SetDisabledResult> => {
+    const account = await deps.repo.users.findById(tx, input.userId);
+    if (!account) return { kind: "not_found" };
+    if ((account.disabledAt !== null) === input.disabled) {
+      return { kind: "no_change", user: account };
+    }
+    if (input.disabled) {
       if (await wouldLoseLastAdmin(deps.repo, tx, account)) return { kind: "last_admin" };
       if (isSelf(input.operatorId, input.userId)) return { kind: "self_change" };
       await deps.repo.users.setDisabledAt(tx, account.id, at, at);
@@ -260,11 +263,7 @@ export async function setAccountDisabled(
         input.traceId,
       );
       return { kind: "ok", user: { ...account, disabledAt: at, updatedAt: at } };
-    });
-    return outcome;
-  }
-
-  const user = await deps.db.transaction(async (tx) => {
+    }
     await deps.repo.users.setDisabledAt(tx, account.id, null, at);
     await ctx.emit(
       tx,
@@ -273,9 +272,11 @@ export async function setAccountDisabled(
       { userId: account.id, actorId: input.operatorId },
       input.traceId,
     );
-    return { ...account, disabledAt: null, updatedAt: at } satisfies UserRecord;
+    return {
+      kind: "ok",
+      user: { ...account, disabledAt: null, updatedAt: at } satisfies UserRecord,
+    };
   });
-  return { kind: "ok", user };
 }
 
 /**
@@ -289,11 +290,12 @@ export async function deleteAccount(
   input: RequestTrace & { operatorId: string; userId: string },
 ): Promise<DeleteAccountResult> {
   const { deps } = ctx;
-  const account = await deps.repo.users.findById(deps.db, input.userId);
-  if (!account) return { kind: "not_found" };
 
   try {
     const outcome = await deps.db.transaction(async (tx): Promise<DeleteAccountResult> => {
+      // 目标行以事务里读到的那次为准（同 updateAccount，2026-11-29 审查 D-01）。
+      const account = await deps.repo.users.findById(tx, input.userId);
+      if (!account) return { kind: "not_found" };
       // 降级、停用、删号三道闸共用一道（规格 G-18、G-20）。
       if (await wouldLoseLastAdmin(deps.repo, tx, account)) return { kind: "last_admin" };
       if (isSelf(input.operatorId, input.userId)) return { kind: "self_change" };
