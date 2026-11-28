@@ -10,7 +10,7 @@ const failure = (patch: Partial<ApiFailure>): ApiFailure => ({
   ...patch,
 });
 
-/** 规格的错误码表里的九个码（docs/spec/identity.md），每个都要有自己的说法。 */
+/** 身份规格的错误码表里的九个码（docs/spec/identity.md），每个都要有自己的说法。 */
 const CODES = [
   ["auth_invalid_credentials", 401, "用户名或口令不对"],
   ["auth_account_disabled", 403, "账号已停用"],
@@ -19,6 +19,15 @@ const CODES = [
   ["csrf_origin_mismatch", 403, "页面地址对不上"],
   ["auth_current_password_wrong", 400, "旧口令不对"],
   ["auth_password_reused", 400, "新口令和旧口令一样"],
+] as const;
+
+/** 人员与用户组这一片新加的五个码（docs/spec/people.md 错误码表），都是 409。 */
+const PEOPLE_CODES = [
+  ["identity_username_taken", "用户名已被占用"],
+  ["identity_group_name_taken", "组名已被占用"],
+  ["identity_last_admin", "这是最后一个管理员"],
+  ["identity_self_change", "不能对自己做这个"],
+  ["identity_user_has_projects", "建过工程的账号只能停用"],
 ] as const;
 
 describe("把失败翻成给人看的话", () => {
@@ -91,6 +100,14 @@ describe("把失败翻成给人看的话", () => {
     expect(
       explainFailure(failure({ status: 400, code: "invalid_request", message: "名字太长" })).detail,
     ).toBe("名字太长");
+  });
+
+  it.each(PEOPLE_CODES)("人员与用户组的 409 %s 说得出是哪一种（规格 G-41）", (code, title) => {
+    const text = explainFailure(failure({ status: 409, code }));
+    expect(text.title).toBe(title);
+    expect(text.detail.length).toBeGreaterThan(6);
+    // 护栏的 409 是预期内的失败：说清楚怎么办就好，不带请求号。
+    expect(text.requestId).toBeUndefined();
   });
 
   it("工程域的三个码各有自己的说法（docs/spec/projects.md 错误码表）", () => {

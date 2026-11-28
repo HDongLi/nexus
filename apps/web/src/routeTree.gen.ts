@@ -11,6 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PeopleRouteImport } from './routes/people'
+import { Route as GroupsIndexRouteImport } from './routes/groups/index'
+import { Route as GroupsGroupIdRouteImport } from './routes/groups/$groupId'
 import { Route as ProjectsIndexRouteImport } from './routes/projects/index'
 import { Route as ProjectsProjectIdRouteImport } from './routes/projects/$projectId'
 
@@ -22,6 +25,21 @@ const IndexRoute = IndexRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PeopleRoute = PeopleRouteImport.update({
+  id: '/people',
+  path: '/people',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsIndexRoute = GroupsIndexRouteImport.update({
+  id: '/groups/',
+  path: '/groups/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const GroupsGroupIdRoute = GroupsGroupIdRouteImport.update({
+  id: '/groups/$groupId',
+  path: '/groups/$groupId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsIndexRoute = ProjectsIndexRouteImport.update({
@@ -38,34 +56,68 @@ const ProjectsProjectIdRoute = ProjectsProjectIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/people': typeof PeopleRoute
+  '/groups/$groupId': typeof GroupsGroupIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/groups/': typeof GroupsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/people': typeof PeopleRoute
+  '/groups/$groupId': typeof GroupsGroupIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/groups': typeof GroupsIndexRoute
   '/projects': typeof ProjectsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/people': typeof PeopleRoute
+  '/groups/$groupId': typeof GroupsGroupIdRoute
   '/projects/$projectId': typeof ProjectsProjectIdRoute
+  '/groups/': typeof GroupsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/projects/$projectId' | '/projects/'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/people'
+    | '/groups/$groupId'
+    | '/projects/$projectId'
+    | '/groups/'
+    | '/projects/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/projects/$projectId' | '/projects'
-  id: '__root__' | '/' | '/login' | '/projects/$projectId' | '/projects/'
+  to:
+    | '/'
+    | '/login'
+    | '/people'
+    | '/groups/$groupId'
+    | '/projects/$projectId'
+    | '/groups'
+    | '/projects'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/people'
+    | '/groups/$groupId'
+    | '/projects/$projectId'
+    | '/groups/'
+    | '/projects/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
+  PeopleRoute: typeof PeopleRoute
+  GroupsGroupIdRoute: typeof GroupsGroupIdRoute
   ProjectsProjectIdRoute: typeof ProjectsProjectIdRoute
+  GroupsIndexRoute: typeof GroupsIndexRoute
   ProjectsIndexRoute: typeof ProjectsIndexRoute
 }
 
@@ -83,6 +135,27 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/people': {
+      id: '/people'
+      path: '/people'
+      fullPath: '/people'
+      preLoaderRoute: typeof PeopleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/': {
+      id: '/groups/'
+      path: '/groups'
+      fullPath: '/groups/'
+      preLoaderRoute: typeof GroupsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/groups/$groupId': {
+      id: '/groups/$groupId'
+      path: '/groups/$groupId'
+      fullPath: '/groups/$groupId'
+      preLoaderRoute: typeof GroupsGroupIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects/': {
@@ -105,7 +178,10 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  PeopleRoute: PeopleRoute,
+  GroupsGroupIdRoute: GroupsGroupIdRoute,
   ProjectsProjectIdRoute: ProjectsProjectIdRoute,
+  GroupsIndexRoute: GroupsIndexRoute,
   ProjectsIndexRoute: ProjectsIndexRoute,
 }
 export const routeTree = rootRouteImport

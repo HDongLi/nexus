@@ -9,6 +9,7 @@ import {
   PageBody,
   PageHeader,
   Panel,
+  StatusBadge,
   buttonClass,
 } from "@nexus/ui-kit";
 import { useQueryClient } from "@tanstack/react-query";
@@ -18,6 +19,7 @@ import { useState } from "react";
 import { UpdateProjectDialog } from "../../components/projects/update-project-dialog.tsx";
 import { api, type Outcome } from "../../lib/api.ts";
 import { explainFailure, type Explanation } from "../../lib/failure.ts";
+import { findPerson, personLabel, shortId } from "../../lib/people.ts";
 import {
   avatarOf,
   displayNameOf,
@@ -61,6 +63,33 @@ function MissingProject() {
         </Panel>
       </PageBody>
     </>
+  );
+}
+
+/**
+ * 创建者一栏（规格 G-07 的换法）：详情只带 createdById，拿它去同事名录换「显示名（用户名）」。
+ * 名录只列启用的账号，建过工程的又删不掉（规格 G-21）：查不到就是已停用，
+ * 显示编号前八位加「已停用」小标。名录没取到时不猜，只给编号。
+ */
+function Creator({ id }: { id: string }) {
+  const people = useEndpoint(["people"], () => api.GET("/api/v1/people"));
+  if (people.isPending) return <span className="text-ink-3">正在取……</span>;
+  if (people.data?.ok === true) {
+    const person = findPerson(id, people.data.data.people);
+    if (person !== undefined) return <span>{personLabel(person)}</span>;
+    return (
+      <span className="inline-flex items-center gap-2">
+        <span className="font-mono" title={id}>
+          {shortId(id)}
+        </span>
+        <StatusBadge tone="warn">已停用</StatusBadge>
+      </span>
+    );
+  }
+  return (
+    <span className="font-mono" title={id}>
+      {shortId(id)}
+    </span>
   );
 }
 
@@ -154,6 +183,10 @@ function ProjectDetailPage() {
                   ) : (
                     detail.data.data.project.avatar
                   )}
+                </DescriptionDetail>
+                <DescriptionTerm>创建者</DescriptionTerm>
+                <DescriptionDetail>
+                  <Creator id={detail.data.data.project.createdById} />
                 </DescriptionDetail>
                 <DescriptionTerm>创建时间</DescriptionTerm>
                 <DescriptionDetail>

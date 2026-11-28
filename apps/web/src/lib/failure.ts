@@ -75,6 +75,28 @@ export function explainFailure(failure: ApiFailure, details: FailureDetails = {}
       };
     case "not_found":
       return { title: "找不到", detail: "这条内容可能已经被删掉了。" };
+    case "identity_username_taken":
+      // 规格 G-41：护栏的几种 409 要让人看得懂是哪一种。用户名撞了是字段的事，
+      // 对话框会把它挪到用户名那一栏挨着说；这里的标题就是那一栏的话。
+      return { title: "用户名已被占用", detail: "换一个用户名再试。" };
+    case "identity_group_name_taken":
+      return { title: "组名已被占用", detail: "换一个组名再试。组名不分大小写。" };
+    case "identity_last_admin":
+      return {
+        title: "这是最后一个管理员",
+        detail: "系统至少要留一个启用的管理员。先建一个或启用另一个管理员，再来改这一个。",
+      };
+    case "identity_self_change":
+      return {
+        title: "不能对自己做这个",
+        detail:
+          "停用、删除、降级和重置口令都不能落在自己头上。要改自己的口令，用账号菜单里的「修改口令」。",
+      };
+    case "identity_user_has_projects":
+      return {
+        title: "建过工程的账号只能停用",
+        detail: "这个账号创建过工程，删掉会让这些工程没有创建者。要收走权限就停用它。",
+      };
     case "network_error":
       return { title: "连不上服务器", detail: "检查网络，稍后重试。" };
   }

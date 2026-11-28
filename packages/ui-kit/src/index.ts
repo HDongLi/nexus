@@ -1,6 +1,10 @@
 export { Button, buttonClass } from "./button.tsx";
 export type { ButtonProps } from "./button.tsx";
 export { cn } from "./cn.ts";
+export { ConfirmButton } from "./confirm-button.tsx";
+export type { ConfirmButtonProps } from "./confirm-button.tsx";
+export { CopyButton } from "./copy-button.tsx";
+export type { CopyButtonProps } from "./copy-button.tsx";
 export { DescriptionDetail, DescriptionList, DescriptionTerm } from "./description-list.tsx";
 export { Dialog } from "./dialog.tsx";
 export type { DialogProps } from "./dialog.tsx";
@@ -28,6 +32,8 @@ export {
 export type { SidebarItemProps } from "./shell.tsx";
 export { StatusBadge } from "./status-badge.tsx";
 export type { StatusTone } from "./status-badge.tsx";
+export { Switch } from "./switch.tsx";
+export type { SwitchProps } from "./switch.tsx";
 export { TextInput } from "./text-input.tsx";
 export type { TextInputProps } from "./text-input.tsx";
 export {
