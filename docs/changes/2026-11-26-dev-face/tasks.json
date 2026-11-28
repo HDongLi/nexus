@@ -374,5 +374,126 @@
       "docs/changes/2026-11-26-dev-face/tasks.json",
       "AGENTS.md"
     ]
+  },
+  {
+    "id": "T-0028",
+    "title": "实现：会话核心（后端）",
+    "domain": "sessions",
+    "depends_on": ["T-0021", "T-0025"],
+    "scope": [
+      "modules/sessions/**",
+      "modules/projects/**",
+      "apps/api/**",
+      "packages/api-client/**",
+      "packages/contracts/**",
+      "packages/http-kit/**",
+      "packages/db/**",
+      "pnpm-workspace.yaml",
+      "turbo.json",
+      "docs/changes/2026-11-26-dev-face/design-04-ai-sessions.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "acceptance": [
+      "pnpm contracts -- --check",
+      "pnpm --filter @nexus/sessions test",
+      "pnpm --filter @nexus/api test:integration",
+      "pnpm verify"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/ai-sessions.md",
+      "docs/spec/identity.md",
+      "docs/spec/projects.md",
+      "docs/spec/people.md",
+      "docs/changes/2026-11-26-dev-face/design-01-login.md",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md",
+      "docs/changes/2026-11-26-dev-face/design-03-people.md",
+      "docs/changes/2026-11-26-dev-face/design-04-ai-sessions.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0005-身份与会话的基线.md",
+      "docs/adr/0006-模块之间的三种关系.md",
+      "docs/adr/0007-新建工程的耗时与预算例外.md",
+      "modules/identity/module.md",
+      "modules/projects/module.md",
+      "modules/event-log/module.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0029",
+    "title": "实现：沙盒与合入（后端）",
+    "domain": "sessions",
+    "depends_on": ["T-0028"],
+    "scope": [
+      "modules/sessions/**",
+      "modules/projects/**",
+      "apps/api/**",
+      "packages/api-client/**",
+      "packages/contracts/**",
+      "packages/http-kit/**",
+      "packages/db/**",
+      "pnpm-workspace.yaml",
+      "turbo.json",
+      "docs/changes/2026-11-26-dev-face/design-04-ai-sessions.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "acceptance": [
+      "pnpm contracts -- --check",
+      "pnpm --filter @nexus/sessions test",
+      "pnpm --filter @nexus/api test:integration",
+      "pnpm verify"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/ai-sessions.md",
+      "docs/spec/projects.md",
+      "docs/spec/people.md",
+      "docs/changes/2026-11-26-dev-face/design-04-ai-sessions.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0006-模块之间的三种关系.md",
+      "docs/adr/0007-新建工程的耗时与预算例外.md",
+      "modules/projects/module.md",
+      "modules/sessions/module.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0030",
+    "title": "实现：会话页与总览（前端）",
+    "domain": "web",
+    "depends_on": ["T-0029"],
+    "scope": ["apps/web/**", "packages/ui-kit/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/web test",
+      "pnpm --filter @nexus/web typecheck",
+      "pnpm gate:l3"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/ai-sessions.md",
+      "docs/changes/2026-11-26-dev-face/design-04-ai-sessions.md",
+      "docs/changes/2026-11-26-dev-face/review-01-login.md",
+      "docs/adr/0004-视觉语言.md",
+      "packages/api-client/openapi.json",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0031",
+    "title": "审查：第 4 片",
+    "domain": "sessions",
+    "depends_on": ["T-0030"],
+    "scope": ["docs/changes/2026-11-26-dev-face/review-04-ai-sessions.md"],
+    "acceptance": ["审查报告里每条结论都有复现步骤或命令输出作证"],
+    "context": [
+      "docs/spec/ai-sessions.md",
+      "docs/changes/2026-11-26-dev-face/design-04-ai-sessions.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md"
+    ]
   }
 ]
