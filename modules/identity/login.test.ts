@@ -172,12 +172,14 @@ describe("记失败与锁定", () => {
 
   it("连错到第 5 次进入锁定，第 6 次被拒（I-13）", async () => {
     const { login, failures } = setup({ users: [userRow()] });
-    for (let i = 1; i < MAX_FAILURES; i++)
-      expect(await login("alice", WRONG)).toEqual({ kind: "invalid" });
+    // 阈值写死成 5，不用 MAX_FAILURES：这条用例钉的就是「5」这个值本身，
+    // 引常量自指的话，实现把阈值改错它也不会红（2026-11-28 审查 D-02）。
+    for (let i = 1; i < 5; i++) expect(await login("alice", WRONG)).toEqual({ kind: "invalid" });
     expect(failures("alice")?.lockedUntil).toBeNull();
     // 第 5 次失败本身就是触发锁定的那一次，对调用方仍然是「不对」
     expect(await login("alice", WRONG)).toEqual({ kind: "invalid" });
-    expect(failures("alice")?.failureCount).toBe(MAX_FAILURES);
+    expect(failures("alice")?.failureCount).toBe(5);
+    expect(MAX_FAILURES).toBe(5);
     expect(await login("alice", RIGHT)).toEqual({ kind: "locked", retryAfterSeconds: 900 });
   });
 

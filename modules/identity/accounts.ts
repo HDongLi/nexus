@@ -1,4 +1,4 @@
-import type { Tx } from "@nexus/db";
+import { isUniqueViolation, type Tx } from "@nexus/db";
 import { randomUUID } from "node:crypto";
 import { PASSWORD_CHANGED, USER_CREATED } from "./events.ts";
 import { MAX_PASSWORD_LENGTH } from "./password.ts";
@@ -144,7 +144,5 @@ export async function setDisabled(
   });
 }
 
-/** Postgres 的「违反唯一约束」。PGlite 报的也是同一个错误码。 */
-function isUniqueViolation(err: unknown): boolean {
-  return typeof err === "object" && err !== null && (err as { code?: unknown }).code === "23505";
-}
+// 「违反唯一约束」的判定住在 @nexus/db（isUniqueViolation）：drizzle 把数据库的错包了一层，
+// 错误码在 cause 上，只看最外层会漏判（2026-11-28，工程模块实弹后迁到公共包，身份模块同款换掉）。
