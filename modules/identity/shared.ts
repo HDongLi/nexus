@@ -8,12 +8,32 @@ import {
   LOGOUT,
   PASSWORD_CHANGED,
   USER_CREATED,
+  USER_DELETED,
+  USER_DISABLED,
+  USER_ENABLED,
+  USER_PASSWORD_RESET,
+  USER_UPDATED,
   loginFailedPayload,
   loginSucceededPayload,
   logoutPayload,
   passwordChangedPayload,
   userCreatedPayload,
+  userDeletedPayload,
+  userDisabledPayload,
+  userEnabledPayload,
+  userPasswordResetPayload,
+  userUpdatedPayload,
 } from "./events.ts";
+import {
+  GROUP_CREATED,
+  GROUP_DELETED,
+  GROUP_MEMBERS_CHANGED,
+  GROUP_RENAMED,
+  groupCreatedPayload,
+  groupDeletedPayload,
+  groupMembersChangedPayload,
+  groupRenamedPayload,
+} from "./group-events.ts";
 import { lockedSeconds, lockoutKey, nextFailure } from "./lockout.ts";
 import { argon2PasswordHasher, type PasswordHasher } from "./password.ts";
 import type { IdentityRepo, SessionRecord, UserRecord } from "./repo.ts";
@@ -21,7 +41,7 @@ import { hashToken } from "./tokens.ts";
 
 /**
  * 几个用例文件共用的东西：依赖的形状、结果的形状、几个内部帮手。
- * 结果的形状也放在这里，是为了让 service.ts 和 accounts.ts 都不必回头引用对方（模块依赖必须无环）。
+ * 结果的形状也放在这里，是为了让 service.ts 和各用例文件不必回头引用对方（模块依赖必须无环）。
  */
 
 export interface IdentityServiceDeps {
@@ -47,6 +67,11 @@ export interface RequestTrace {
 /** 一条有效的会话。renewed 为真表示这次请求把会话续了期，响应里要重发 cookie（规格 I-22）。 */
 export interface AuthenticatedSession {
   user: CurrentUser;
+  /**
+   * 这个人所属的用户组编号（规格 G-34，2026-11-28）。访问闸把它放进请求上下文，工程模块建工程、
+   * 判可见性用；对外的 `me` 不带它（规格 G-34）。组变了下一个请求就生效：每个请求都重新认证。
+   */
+  groupIds: string[];
   renewed: boolean;
 }
 
@@ -109,6 +134,15 @@ const PAYLOAD_SCHEMAS: Record<string, ZodType> = {
   [LOGOUT]: logoutPayload,
   [PASSWORD_CHANGED]: passwordChangedPayload,
   [USER_CREATED]: userCreatedPayload,
+  [USER_UPDATED]: userUpdatedPayload,
+  [USER_PASSWORD_RESET]: userPasswordResetPayload,
+  [USER_DISABLED]: userDisabledPayload,
+  [USER_ENABLED]: userEnabledPayload,
+  [USER_DELETED]: userDeletedPayload,
+  [GROUP_CREATED]: groupCreatedPayload,
+  [GROUP_RENAMED]: groupRenamedPayload,
+  [GROUP_MEMBERS_CHANGED]: groupMembersChangedPayload,
+  [GROUP_DELETED]: groupDeletedPayload,
 };
 
 export function toUser(record: UserRecord): CurrentUser {

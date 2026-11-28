@@ -5,31 +5,45 @@ import type { ZodType } from "zod";
 import {
   PROJECT_CREATED,
   PROJECT_UPDATED,
+  VISIBILITY_CHANGED,
   projectCreatedPayload,
   projectUpdatedPayload,
+  visibilityChangedPayload,
 } from "./events.ts";
 import type { GitRunner } from "./git.ts";
-import type { ProjectRecord, ProjectRepo } from "./repo.ts";
+import type { ProjectRecord, ProjectRepo, VisibilityScope } from "./repo.ts";
 import { discardRepository, type ProjectHead } from "./repository.ts";
 
 /**
  * 几个用例文件共用的东西：依赖的形状、结果的形状、上下文。
- * 形状也放在这里，是为了让 service.ts 和 create.ts 都不必回头引用对方（模块依赖必须无环）。
- * 用例本身在 service.ts（清单、详情、改）和 create.ts（新建）；业务规则只住在这两个文件里，
- * 依赖全部由创建函数显式传进来，模块不自己去拿。
+ * 形状也放在这里，是为了让 service.ts 和 create.ts、group-visibility.ts 都不必回头引用对方（模块依赖必须无环）。
+ * 用例本身在 service.ts（清单、详情、改）、create.ts（新建）和 group-visibility.ts（一个组的可见工程）；
+ * 业务规则只住在这三个文件里，依赖全部由创建函数显式传进来，模块不自己去拿。
  */
-
-/** 调用者：当前登录的账号（规格「术语」）。 */
-export type Caller = Pick<CurrentUser, "id" | "isAdmin">;
 
 /**
- * 可见性判定：输入一条记录和调用者，回答看不看得见（规格 P-10）。清单、详情、改三处都只问它。
- * 这一片接上的实现是管理员或创建者；第 3 片换成带用户组的实现，路由和用例不用改（设计 02）。
+ * 调用者：当前登录的账号，加上他所属的用户组编号（规格 G-32、G-34，2026-11-28）。
+ * 组编号由访问闸在认证时放进请求上下文，处理函数组装到这里；模块不调身份模块（规格 G-31）。
  */
-export type Visibility = (project: ProjectRecord, caller: Caller) => boolean;
+export type Caller = Pick<CurrentUser, "id" | "isAdmin"> & { groupIds: string[] };
 
-export const ownerOrAdmin: Visibility = (project, caller) =>
-  caller.isAdmin || project.createdById === caller.id;
+/**
+ * 可见性判定：从调用者交出范围（规格 P-10）。清单、详情、改三处都只问它。
+ * 缺省实现见 callerScope；测试换成恒假（什么都匹配不上）、恒真（all）。
+ */
+export type Visibility = (caller: Caller) => VisibilityScope;
+
+/** 缺省的可见性：管理员全部；否则创建者是我，或我的任何一个组看得见。 */
+export const callerScope: Visibility = (caller) =>
+  caller.isAdmin
+    ? { kind: "all" }
+    : { kind: "filtered", creatorId: caller.id, groupIds: caller.groupIds };
+
+/**
+ * 「这个用户组在不在」（规格 G-31）。身份模块的唯一公开查询，由组合根接到这里；
+ * 读和整体替换一个组的可见工程之前先问它，不在回 404。
+ */
+export type GroupExists = (groupId: string) => Promise<boolean>;
 
 /** 模块要记日志时的最小形状：应用把它的日志器传进来，模块不依赖具体的日志库。 */
 export interface ProjectsLog {
@@ -46,6 +60,8 @@ export interface ProjectsServiceDeps {
   /** git 执行器，带超时。测试换桩。 */
   git: GitRunner;
   canSee: Visibility;
+  /** 「用户组在不在」。身份模块的公开查询，组合根接线；测试换桩（规格 G-31）。 */
+  groupExists: GroupExists;
   /** 日志。底层原因连同请求号写在这里，不回给调用方（规格 P-05）。 */
   log?: ProjectsLog;
   /** 当前时间。由应用或测试传入，模块不直接读系统时钟。 */
@@ -106,6 +122,7 @@ export interface ProjectsContext {
 const PAYLOAD_SCHEMAS: Record<string, ZodType> = {
   [PROJECT_CREATED]: projectCreatedPayload,
   [PROJECT_UPDATED]: projectUpdatedPayload,
+  [VISIBILITY_CHANGED]: visibilityChangedPayload,
 };
 
 export function createProjectsContext(deps: ProjectsServiceDeps): ProjectsContext {

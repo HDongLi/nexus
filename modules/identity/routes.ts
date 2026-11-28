@@ -1,11 +1,31 @@
 import { API_PREFIX, currentUser, errors, json, route } from "@nexus/http-kit";
 import { z } from "zod";
+import {
+  createUserRoute,
+  deleteUserRoute,
+  disableUserRoute,
+  enableUserRoute,
+  getUserRoute,
+  listPeopleRoute,
+  listUsersRoute,
+  resetPasswordRoute,
+  updateUserRoute,
+} from "./account-routes.ts";
+import {
+  createGroupRoute,
+  deleteGroupRoute,
+  getGroupRoute,
+  listGroupsRoute,
+  renameGroupRoute,
+  replaceMembersRoute,
+} from "./group-routes.ts";
 
 /**
  * 这个模块的路由声明。只有形状，没有行为：生成契约文档时只读这一个文件，不起数据库。
  *
- * 四条路由，访问级别照规格 I-01。登录是公开的：谁都得先能走到门口。其余三条要登录。
+ * 登录会话四条，访问级别照规格 I-01。登录是公开的：谁都得先能走到门口。其余三条要登录。
  * 旧的 /api/auth/* 路径不保留，打到那儿一律 404（规格 I-03）。
+ * 管账号的八条加同事名录在 account-routes.ts，用户组六条在 group-routes.ts（人员规格 G-01）。
  */
 
 /** 用户名 1 到 64 个字符，口令 1 到 128 个字符。多出来的键也算不合形状。 */
@@ -134,5 +154,25 @@ export const passwordRoute = route("user", {
 /** 契约文档需要的全部内容。 */
 export const identityContract = {
   name: "identity",
-  routes: [loginRoute, meRoute, logoutRoute, passwordRoute],
+  routes: [
+    loginRoute,
+    meRoute,
+    logoutRoute,
+    passwordRoute,
+    listUsersRoute,
+    createUserRoute,
+    getUserRoute,
+    updateUserRoute,
+    resetPasswordRoute,
+    disableUserRoute,
+    enableUserRoute,
+    deleteUserRoute,
+    listPeopleRoute,
+    listGroupsRoute,
+    createGroupRoute,
+    getGroupRoute,
+    renameGroupRoute,
+    replaceMembersRoute,
+    deleteGroupRoute,
+  ],
 } as const;

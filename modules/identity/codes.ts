@@ -23,3 +23,21 @@ export const authErrorCodes = {
   /** 新口令与旧口令相同（400）。 */
   passwordReused: "auth_password_reused",
 } as const;
+
+/**
+ * 管账号、管用户组会回的五个失败码（人员规格的错误码表，2026-11-28）。
+ * 模块的处理函数从这里拿，免得同一个码在两处各写一份字面量、日后改漏一处。
+ * `invalid_request`、`not_found`、`internal_error` 是全平台已有的，不在这张表里。
+ */
+export const identityErrorCodes = {
+  /** 建号时用户名已被占用，含只差大小写（409）。 */
+  usernameTaken: "identity_username_taken",
+  /** 建组或改名时组名已被占用，含只差大小写（409）。 */
+  groupNameTaken: "identity_group_name_taken",
+  /** 这次改动会让系统没有启用的管理员（409）。 */
+  lastAdmin: "identity_last_admin",
+  /** 管理员想降级、停用、删除自己，或给自己重置口令（409）。 */
+  selfChange: "identity_self_change",
+  /** 要删的账号建过工程；库的引用约束拒绝的，这里只把它翻译成人话（409，规格 G-21）。 */
+  userHasProjects: "identity_user_has_projects",
+} as const;

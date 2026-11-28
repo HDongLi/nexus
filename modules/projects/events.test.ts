@@ -80,10 +80,10 @@ describe("失败码（规格 P-04）", () => {
   });
 });
 
-describe("路由声明（规格 P-01）", () => {
+describe("路由声明（规格 P-01，加人员规格 G-01 的两条）", () => {
   const declared = projectsContract.routes;
 
-  it("恰好四条路由，访问级别都是 user，方法和路径照规格", () => {
+  it("工程的四条访问级别都是 user，方法和路径照规格；一个组的可见工程那两条是 admin、跟着组走", () => {
     expect(
       declared.map((item) => [item.access, item.route.method.toUpperCase(), item.route.path]),
     ).toEqual([
@@ -91,11 +91,13 @@ describe("路由声明（规格 P-01）", () => {
       ["user", "POST", "/api/v1/projects"],
       ["user", "GET", "/api/v1/projects/{projectId}"],
       ["user", "PATCH", "/api/v1/projects/{projectId}"],
+      ["admin", "GET", "/api/v1/groups/{groupId}/projects"],
+      ["admin", "PUT", "/api/v1/groups/{groupId}/projects"],
     ]);
     expect(projectsContract.name).toBe("projects");
   });
 
-  // 四条声明的类型是四种形状的并集：取 request 之前先问有没有
+  // 六条声明的类型是六种形状的并集：取 request 之前先问有没有
   const requestOf = (item: (typeof declared)[number]) =>
     "request" in item.route ? item.route.request : undefined;
   const paramNames = (item: (typeof declared)[number]): string[] => {
@@ -108,14 +110,23 @@ describe("路由声明（规格 P-01）", () => {
     return request && "body" in request ? request.body : undefined;
   };
 
-  it("路径参数的名字都是 projectId；只有新建和改收请求体，而且是必填的", () => {
+  it("工程路径的参数名都是 projectId，组路径的都是 groupId；收请求体的都必填", () => {
     expect(declared.map((item) => paramNames(item))).toEqual([
       [],
       [],
       ["projectId"],
       ["projectId"],
+      ["groupId"],
+      ["groupId"],
     ]);
-    expect(declared.map((item) => bodyOf(item) !== undefined)).toEqual([false, true, false, true]);
+    expect(declared.map((item) => bodyOf(item) !== undefined)).toEqual([
+      false,
+      true,
+      false,
+      true,
+      false,
+      true,
+    ]);
     for (const item of declared) {
       const body = bodyOf(item);
       if (body) expect(body.required, item.route.path).toBe(true);
@@ -125,6 +136,13 @@ describe("路由声明（规格 P-01）", () => {
   it("操作名不重复", () => {
     const ids = declared.map((item) => item.route.operationId);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(["listProjects", "createProject", "getProject", "updateProject"]);
+    expect(ids).toEqual([
+      "listProjects",
+      "createProject",
+      "getProject",
+      "updateProject",
+      "getGroupProjects",
+      "setGroupProjects",
+    ]);
   });
 });

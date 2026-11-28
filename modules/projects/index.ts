@@ -2,7 +2,14 @@ import { bind, fail, requireUser, type AnyRouteBinding, type AppEnv } from "@nex
 import type { Context } from "hono";
 import { projectsErrorCodes } from "./codes.ts";
 import type { ProjectRecord } from "./repo.ts";
-import { createRoute, detailRoute, listRoute, updateRoute } from "./routes.ts";
+import {
+  createRoute,
+  detailRoute,
+  getGroupProjectsRoute,
+  listRoute,
+  setGroupProjectsRoute,
+  updateRoute,
+} from "./routes.ts";
 import { createProjectsService, type ProjectsService } from "./service.ts";
 import type { Caller, ProjectsServiceDeps } from "./shared.ts";
 
@@ -37,7 +44,11 @@ export function toProject(record: ProjectRecord) {
  */
 export function createProjectsModule(deps: ProjectsServiceDeps): ProjectsModule {
   const service = createProjectsService(deps);
-  const caller = (c: Context<AppEnv>): Caller => requireUser(c);
+  // 调用者带上他所属的用户组编号：访问闸在认证时放进上下文（规格 G-34），模块不调身份模块（规格 G-31）。
+  const caller = (c: Context<AppEnv>): Caller => ({
+    ...requireUser(c),
+    groupIds: c.get("groupIds") ?? [],
+  });
   const notFound = (c: Context<AppEnv>) => fail(c, 404, "not_found", NOT_FOUND_MESSAGE);
 
   return {
@@ -79,6 +90,26 @@ export function createProjectsModule(deps: ProjectsServiceDeps): ProjectsModule 
         }
         return notFound(c);
       }),
+      bind(getGroupProjectsRoute, async (c) => {
+        const result = await service.listGroupProjects(c.req.valid("param").groupId);
+        if (result.kind === "ok") return c.json({ projectIds: result.projectIds }, 200);
+        return notFound(c);
+      }),
+      bind(setGroupProjectsRoute, async (c) => {
+        const result = await service.setGroupProjects(
+          requireUser(c).id,
+          c.req.valid("param").groupId,
+          c.req.valid("json").projectIds,
+          c.get("requestId"),
+        );
+        if (result.kind === "ok" || result.kind === "no_change") {
+          return c.json({ projectIds: result.projectIds }, 200);
+        }
+        if (result.kind === "unknown_project") {
+          return fail(c, 400, "invalid_request", "工程编号里有不存在的");
+        }
+        return notFound(c);
+      }),
     ],
   };
 }
@@ -87,15 +118,28 @@ export { projectsContract } from "./routes.ts";
 export { projectsErrorCodes } from "./codes.ts";
 export { createProjectsRepo } from "./repo.ts";
 export { createProjectsService } from "./service.ts";
-export { ownerOrAdmin } from "./shared.ts";
+// 缺省的可见性范围（管理员全部；否则创建者或组员），2026-11-28 起随出口导出，组合根当缺省用。
+export { callerScope } from "./shared.ts";
 export { createGitRunner, GIT_IDENTITY, GIT_TIMEOUT_MS, GitError } from "./git.ts";
 export type { GitOutput, GitRunner, GitRunnerOptions } from "./git.ts";
 export { DEFAULT_BRANCH, INITIAL_FILES } from "./initial-files.ts";
 export type { ProjectHead } from "./repository.ts";
+export { projectGroups } from "./schema.ts";
 export type { NewProject, ProjectRecord, ProjectRepo } from "./repo.ts";
 export type { ProjectsService } from "./service.ts";
+export type { GroupProjectsResult } from "./group-visibility.ts";
+export {
+  PROJECT_CREATED,
+  PROJECT_UPDATED,
+  VISIBILITY_CHANGED,
+  projectCreatedPayload,
+  projectUpdatedPayload,
+  visibilityChangedPayload,
+} from "./events.ts";
+export type { Caller, GroupExists, Visibility } from "./shared.ts";
+// 范围的形状跟着仓储走（repo.ts 定义，shared.ts 的判定交出它）；转出口给测试换桩用。
+export type { VisibilityScope } from "./repo.ts";
 export type {
-  Caller,
   CreateProjectInput,
   CreateProjectResult,
   ProjectDetail,
@@ -103,5 +147,4 @@ export type {
   ProjectsServiceDeps,
   UpdateProjectInput,
   UpdateProjectResult,
-  Visibility,
 } from "./shared.ts";

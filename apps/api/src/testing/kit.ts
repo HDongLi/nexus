@@ -204,6 +204,8 @@ export async function sessionRows(db: Db): Promise<SessionRow[]> {
 export async function clearIdentity(db: Db): Promise<void> {
   await db.execute(sql`delete from identity_sessions`);
   await db.execute(sql`delete from identity_login_failures`);
+  await db.execute(sql`delete from identity_group_members`);
+  await db.execute(sql`delete from identity_groups`);
   await db.execute(sql`delete from identity_users`);
   await db.execute(sql`delete from events where source = 'identity'`);
 }

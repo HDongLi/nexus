@@ -5,14 +5,15 @@
 | 名字 | `@nexus/projects` |
 | 一句话 | 工程记录、平台替人建并管理的裸仓库、谁看得见哪个工程、显示名和头像字 |
 | 2026-11-27 | 随开发面重置第 2 片建立。行为以 [规格](../../docs/spec/projects.md) 为准，落在哪见 [设计 02](../../docs/changes/2026-11-26-dev-face/design-02-projects.md) |
+| 2026-11-28 | 随第 3 片加盖：关系表 `project_groups`、建工程自动挂组、一个组的可见工程两条路由、可见性接上用户组。以 [人员规格](../../docs/spec/people.md) G-31 到 G-35 为准，落在哪见 [设计 03](../../docs/changes/2026-11-26-dev-face/design-03-people.md) |
 
 ## 职责
 
-回答「有哪些工程、这个工程是什么」。四条路由和它们底下的东西都在这里：一条记录、一个裸仓库、两个事件、一个可替换的可见性判定。
+回答「有哪些工程、这个工程是什么」。路由和它们底下的东西都在这里：记录、裸仓库、事件、可见性的范围、用户组关系表。
 
-和身份模块只有一个方向、只在表定义上：`projects.created_by_id` 用引用约束指向身份模块出口导出的 `identityUsers`（`ON DELETE RESTRICT`，建过工程的账号删不掉）。运行时谁也不调谁：创建人只存编号。
+和身份模块只有一个方向、两样东西（规格 G-31）：`projects.created_by_id` 用引用约束指向身份模块出口导出的 `identityUsers`（`ON DELETE RESTRICT`，建过工程的账号删不掉）；`project_groups.group_id` 指向 `identityGroups`（`ON DELETE CASCADE`，删组时关系随外键没，不经过本模块的代码）。运行时只调身份模块一个公开查询「组在不在」（组合根接线进构造参数）；身份模块对本模块一无所知。
 
-不管：服务器端的工作树和 AI 会话怎么用仓库（第 4 片）；用户组和授权的界面与路由（第 3 片，这一片只交出一个可替换的判定点）；预览、端口、发布（第 6 片及以后）。
+不管：服务器端的工作树和 AI 会话怎么用仓库（第 4 片）；用户组本身的建、改名、换成员、删（身份模块的）；预览、端口、发布（第 6 片及以后）。
 
 ## 公开接口
 
@@ -22,38 +23,46 @@
   | 用例 | 做什么 |
   |---|---|
   | `service.list(调用者)` | 看得见的工程，新的在前。只读库，不跑 git，不碰仓库目录 |
-  | `service.create(调用者, { slug, displayName?, avatar? }, traceId?)` | 新建：先查短名、建仓库，再开事务写记录、发事件 |
+  | `service.create(调用者, { slug, displayName?, avatar? }, traceId?)` | 新建：先查短名、建仓库，再开事务写记录、挂组、发事件——一次提交 |
   | `service.get(调用者, 编号)` | 一条看得见的记录加 `head`；看不见和不存在都回 `undefined` |
   | `service.update(调用者, 编号, { displayName?, avatar? }, traceId?)` | 改显示名和头像字：先看不看得见、能不能改、有没有变 |
+  | `service.listGroupProjects(组编号)` | 一个组看得见的工程编号。组不在回 `not_found` |
+  | `service.setGroupProjects(操作者编号, 组编号, 工程编号[], traceId?)` | 整体替换一个组看得见的工程 |
 
-- 依赖全部由创建函数传进来：数据库、仓储、事件日志、仓库根目录、git 执行器、可见性判定。`now` 拨表，`git` 换桩，`canSee` 换判定，`repo` 换成写入后抛错的，测试靠这几样。
+- 调用者（`Caller`）是 `{ id, isAdmin, groupIds }`：组编号由访问闸在认证时放进请求上下文（身份模块的认证结果里，规格 G-34），处理函数组装给模块。模块不调身份模块取组。
+- 依赖全部由创建函数传进来：数据库、仓储、事件日志、仓库根目录、git 执行器、可见性判定、`groupExists`。`now` 拨表，`git` 换桩，`canSee` 换范围，`groupExists` 换恒真恒假的桩，`repo` 换成写入后抛错的，测试靠这几样。
 - `createGitRunner(options)`：缺省的 git 执行器。可执行文件、前置参数、每条命令的超时（缺省 30 秒）、追加的环境变量都可以换。
-- `ownerOrAdmin`：这一片的可见性判定，管理员或创建者。
+- `callerScope`：缺省的可见性范围——管理员全部；否则「创建者是我」或「我的任何一个组看得见」。
 - `projectsErrorCodes`：工程这件事的三个失败码。
 - 路由（声明在 `routes.ts`，只依赖 `@nexus/http-kit`、`zod` 和两个纯规则的文件）：
 
   | 方法与路径 | 访问级别 | 作用 |
   |---|---|---|
   | `GET /api/v1/projects` | user | 清单。只回看得见的，新的在前 |
-  | `POST /api/v1/projects` | user | 新建。登录了就能建，不看是不是管理员 |
+  | `POST /api/v1/projects` | user | 新建。登录了就能建，不看是不是管理员；建完组里的人立刻看得见 |
   | `GET /api/v1/projects/{projectId}` | user | 详情。记录加默认分支最新一次提交 |
-  | `PATCH /api/v1/projects/{projectId}` | user | 改显示名和头像字。只有创建者和管理员 |
+  | `PATCH /api/v1/projects/{projectId}` | user | 改显示名和头像字。只有创建者和管理员（G-35：不放宽到组员） |
+  | `GET /api/v1/groups/{groupId}/projects` | admin | 一个组看得见的工程。组不存在回 404 |
+  | `PUT /api/v1/groups/{groupId}/projects` | admin | 整体替换。组不在回 404，工程编号不在回 400 |
+
+  组的路由跟着用户组的路径走，但关系表和判断都是这个模块的（人员规格 G-31）。
 
 ## 文件
 
 | 文件 | 放什么 |
 |---|---|
 | `index.ts` | 唯一出口：把路由声明绑到用例上 |
-| `routes.ts` | 四条路由的声明，纯数据 |
-| `service.ts` | 清单、详情、改 |
-| `create.ts` | 新建 |
-| `shared.ts` | 依赖和结果的形状、上下文（发事件先过形状、失败写日志、扔掉仓库） |
-| `repo.ts`、`schema.ts` | 这个模块唯一写 SQL 的地方，和 `projects` 表 |
+| `routes.ts` | 六条路由的声明，纯数据 |
+| `service.ts` | 清单、详情、改；全部用例的门面 |
+| `create.ts` | 新建（建仓、写记录、挂组、发事件，一次提交） |
+| `group-visibility.ts` | 一个组的可见工程：读、整体替换 |
+| `shared.ts` | 依赖和结果的形状、上下文（发事件先过形状、失败写日志、扔掉仓库）、可见性判定 |
+| `repo.ts`、`schema.ts` | 这个模块唯一写 SQL 的地方，和 `projects`、`project_groups` 两张表；可见性范围的下推也在 repo |
 | `git.ts` | git 执行器：异步子进程、超时、不读服务器用户的配置 |
 | `repository.ts` | 怎么建裸仓库、怎么读最新提交、怎么扔掉 |
 | `initial-files.ts` | 初始提交的三个文件，默认分支名 |
 | `slug.ts`、`names.ts` | 短名的规则；显示名和头像字的规则 |
-| `events.ts`、`codes.ts` | 两个事件和它们 payload 的形状；三个失败码 |
+| `events.ts`、`codes.ts` | 三个事件和它们 payload 的形状；三个失败码 |
 | `testing/` | 单元测试用的内存替身和装配 |
 
 ## 建仓
@@ -64,7 +73,7 @@
 2. 先查一遍短名。占了直接回 409，不跑 git。这一步只是省事，真正的保证是库里的唯一约束。
 3. 生成编号。在 `PROJECTS_ROOT/.tmp/<编号>/` 里 `git init -b main`、写三个文件、`git add`、`git commit`。
 4. `git clone --bare` 到 `PROJECTS_ROOT/<编号>.git`，删掉落脚目录（`.tmp` 空了也删）。
-5. 开事务写记录、发 `projects.project.created`。撞上唯一约束就删掉刚建的裸仓库、回 409；别的原因同样删掉、回 500。
+5. 开事务写记录、发 `projects.project.created`、给创建者所属的每个组挂上这条工程并各发一条 `projects.visibility.changed`（`cause: "project_created"`）——一次提交（规格 G-34）。撞上唯一约束就删掉刚建的裸仓库、回 409；别的原因同样删掉、回 500，组也不动。
 6. 中途任何一步 git 失败或超时：删掉两个目录，回 500 `projects_creation_failed`，底层原因连同请求号写进日志。
 
 目录名取编号不取短名：短名以后可能随删除功能被重用，崩溃留下的半截目录也不该占住一个短名（规格 P-19）。
@@ -73,12 +82,15 @@
 
 ## 事件
 
-都走事件日志，`source` 是 `projects`，`subject` 是工程编号，请求里发的带 `traceId`（等于该请求的请求号）。`actorId` 是调用者的账号编号：事件的主体是工程，不带操作者，事后就查不出是谁改的。要写库的事件和写入在同一个事务里。发出去之前先过 `events.ts` 里的形状。
+都走事件日志，`source` 是 `projects`，工程事件的 `subject` 是工程编号，`projects.visibility.changed` 的 `subject` 是组编号，请求里发的带 `traceId`（等于该请求的请求号）。`actorId` 是操作者的账号编号。要写库的事件和写入在同一个事务里。发出去之前先过 `events.ts` 里的形状。
 
-| 事件 | 什么时候发 | payload |
-|---|---|---|
-| `projects.project.created` | 工程建成 | `projectId`、`slug`、`actorId` |
-| `projects.project.updated` | 显示名或头像字真的变了（没变不发） | `projectId`、`slug`、`actorId`、`changes`。`changes` 只列真变了的键，每个键带 `from` 和 `to` |
+| 事件 | 什么时候发 | subject | payload |
+|---|---|---|---|
+| `projects.project.created` | 工程建成 | 工程编号 | `projectId`、`slug`、`actorId` |
+| `projects.project.updated` | 显示名或头像字真的变了（没变不发） | 工程编号 | `projectId`、`slug`、`actorId`、`changes` |
+| `projects.visibility.changed` | 一个组看得见的工程真的变了：管理员整体替换（`cause: "admin"`）或建工程自动挂上（`cause: "project_created"`），每个组一条（人员规格 G-34、G-36） | 组编号 | `groupId`、`actorId`、`changes`（`projectIds` 的 from/to，全量）、`cause` |
+
+删组时关系表的行随外键没了，不发这条事件（人员规格 G-39）：没有本模块的代码参与。
 
 订阅：无。
 
@@ -87,6 +99,7 @@
 | 表 | 存什么 |
 |---|---|
 | `projects` | 工程记录。`slug` 上有唯一约束；`created_by_id` 非空，引用 `identity_users.id`，`ON DELETE RESTRICT` |
+| `project_groups` | 「哪个组看得见哪些工程」的关系（规格 G-31）。联合主键；`project_id` 引用 `projects`、`group_id` 引用 `identity_groups`，都是 `ON DELETE CASCADE`；`group_id` 上另有索引，按组读可见工程用 |
 
 ## 规格没写到、实现时定下的
 
@@ -95,8 +108,11 @@
 - **详情里的提交时间换算成 UTC。** git 报的是提交者本地的偏移；接口上别的时间都是 UTC，页面不必为它另写一条格式化。
 - **`.gitignore` 的具体条目。** 操作系统杂物列了 `.DS_Store`、`Thumbs.db`、`Desktop.ini`；口令文件 `.env`、`.env.*`，放行 `.env.example`；日志 `*.log`。
 - **认「违反唯一约束」要沿着 `cause` 往下找。** drizzle 把查询错误包成它自己的 `DrizzleQueryError`，数据库的错误码在 `cause` 上。只看最外层的话，并发同短名时输家会被当成建仓失败回 500（2026-11-27 集成测试实弹）。
-- **清单是先读全表、再逐条过可见性判定。** 判定的形状是「一条记录加调用者」，第 3 片要换成带用户组的实现时，判定得改成能下推到 SQL 的形状，到那时再定。
-- **可见性判定是同步的。** 这一片的实现只看记录上的创建人和调用者的管理员位。
+- **可见性交出「范围」，仓储照它过滤。** 第 2 片的判定是同步谓词、清单整表读出后逐条问；数据进了库（关系表在第 3 片落下），判定改成 `callerScope`：从调用者交出一个范围（管理员全部；否则创建者或组员），清单在 SQL 里过滤，详情和改用同一个范围查一条（设计 03「工程模块这一侧」，2026-11-28 落地）。范围的形状（`VisibilityScope`）住在 `repo.ts`——它是要下推到 SQL 的东西，跟着仓储走；判定函数在 `shared.ts`。
+- **自动挂组的每个组各发一条 `projects.visibility.changed`。** 事件的 subject 是组编号，一个组一条，from/to 全量记（人员规格 G-36；2026-11-28 实现定下）。组很多时事件行数跟着多：七个人的单位，组是个位数，够用。
+- **建工程时挂组的行撞上已删的组：整个建仓失败。** 上下文里的组编号是认证那一刻取的；到事务提交那一刻组刚被删的话，`project_groups` 的外键拒绝，整笔回滚、仓库删掉、回 500——照「回到什么都没发生过」办（规格 P-20、G-34 的「工程没建成时一个组都不动」）。模块不为此调身份模块（G-31 只允许一个公开查询，用在这里会多 N 次往返；2026-11-28 实现定下）。
+- **「组在不在」的查询是构造参数。** 缺省接线是身份模块的 `service.groupExists`；测试换恒真恒假的桩（规格 G-31 的验收）。查的是身份模块自己的表，本模块不读它。
+- **清单是先在库里过滤，不再逐条过谓词。** 判定的形状是「调用者 → 范围」，下推到 SQL（2026-11-28 随第 3 片改）。
 - **空的 `PROJECTS_ROOT` 算配错、起不来。** 一个空的路径配置多半是从模板抄下来忘了填；按「没给」处理会把仓库悄悄放进数据目录。
 - **启动时先建仓库根目录、再连库。** 目录都建不出来，就不必再去动数据目录；报错时点名是 `PROJECTS_ROOT` 配的（Node 只报路径上出问题的那一段）。
 - **超时用 SIGKILL 结束子进程。** 挂住的 git 未必会自己收尾。
@@ -118,6 +134,8 @@
 
 一次新建要起四回 git（init、add、commit、clone），时间基本都花在起进程上。写接口的预算是 p95 不超过 200 毫秒（任务书 §10.3）：平静时超了六成，机器忙时超了三倍。要压下去只有两条路：少起进程（比如不 clone，直接在裸仓库里提交），或者把建仓改成后台做、接口先回 202。两条都改契约或语义，留给决策记录。
 
+第 3 片没有重测建仓的耗时：建仓路径没动，事务里多了「每组两三次小查询加一条事件」（七个人的单位，组是个位数）。
+
 ## 不做什么
 
 - 不建工作树、不放钩子、不放工程的配置文件、不占端口、不派脚手架任务：那是这家单位的样子（规格「明确不做的」）。
@@ -125,4 +143,5 @@
 - 不建配额。
 - 不定仓库从外面怎么克隆（SSH 还是 HTTP）：规格「未确定」。
 - 不清扫崩溃留下的没有记录的仓库目录：目录名取编号，它不占短名；要不要清扫没有定。
+- 不管「谁能改」之外的组语义：组的建、改名、换成员、删在身份模块；把组接进「谁能改」不放宽（G-35 已定）。
 - 不自己读环境变量、不自己起线程。配置由应用读。

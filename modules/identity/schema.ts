@@ -4,6 +4,7 @@ import {
   index,
   integer,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -11,7 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * 身份模块的三张表（设计 01「表」）。只声明表，不依赖本模块的任何别的文件。
+ * 身份模块的五张表（设计 01、设计 03「表」）。只声明表，不依赖本模块的任何别的文件。
  */
 
 export const identityUsers = pgTable(
@@ -70,3 +71,44 @@ export const identityLoginFailures = pgTable("identity_login_failures", {
   /** 锁到什么时候。为空就是没锁。锁定存在库里，进程重启不清零（规格 I-15）。 */
   lockedUntil: timestamp("locked_until", { withTimezone: true }),
 });
+
+/**
+ * 用户组（设计 03「表」，规格 G-25 到 G-30）。组不带角色，只带成员；
+ * 「哪个组看得见哪些工程」不在这里，那是工程模块的关系表（规格 G-31）。
+ */
+export const identityGroups = pgTable(
+  "identity_groups",
+  {
+    id: uuid("id").primaryKey(),
+    /** 按去掉首尾空白后的原样（含大小写）保存。查找和查重不分大小写，靠下面这张唯一索引管着（规格 G-25）。 */
+    name: text("name").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    /** 改名、换成员真的动了才更新（规格 G-28、G-29）。 */
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    // 应用层会先查一遍再建组；这张索引是库那一层的保证：两个只差大小写的组名并发建也进不来（规格 G-25）。
+    uniqueIndex("identity_groups_name_lower_idx").on(sql`lower(${table.name})`),
+  ],
+);
+
+/**
+ * 用户组的成员（设计 03「表」）。一个账号可以在多个组里，也可以不在任何组里（规格「术语」）。
+ * 删组、删号时成员关系随外键一起没了，不靠应用层一个个组去摘（规格 G-22、G-30）。
+ */
+export const identityGroupMembers = pgTable(
+  "identity_group_members",
+  {
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => identityGroups.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => identityUsers.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.groupId, table.userId] }),
+    // 每个请求认证时要按人取组（设计 03「认证结果带上用户组」），停用不摘组，行一直在（规格 G-17）。
+    index("identity_group_members_user_id_idx").on(table.userId),
+  ],
+);

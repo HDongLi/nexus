@@ -8,12 +8,13 @@ import {
   type IdentityRepo,
 } from "@nexus/identity";
 import {
+  callerScope,
   createGitRunner,
   createProjectsModule,
   createProjectsRepo,
-  ownerOrAdmin,
   projectsContract,
   type GitRunner,
+  type GroupExists,
   type ProjectRepo,
   type ProjectsModule,
   type Visibility,
@@ -30,10 +31,12 @@ import { createApp } from "./app.ts";
 import { clientIp } from "./http/client-ip.ts";
 import { createIdentityVerifier } from "./http/identity-verifier.ts";
 
-/** 工程模块的可替换件。不给就是真的；集成测试换进来（规格 P-10、P-20、P-22）。 */
+/** 工程模块的可替换件。不给就是真的；集成测试换进来（规格 P-10、P-20、P-22、G-31）。 */
 export interface ProjectsOptions {
-  /** 可见性判定：比如换成恒假、恒真。 */
+  /** 可见性判定：比如换成恒假、恒真（范围形状见 @nexus/projects 的 VisibilityScope）。 */
   canSee?: Visibility;
+  /** 「用户组在不在」的查询：换成恒假、恒真的桩验两条组路由的反应（规格 G-31）。 */
+  groupExists?: GroupExists;
   /** git 执行器：比如换成会失败、会挂起的桩。 */
   git?: GitRunner;
   /** 仓储：换成写入之后故意抛错的，验事件跟着回滚、刚建的仓库被扔掉（规格 P-20）。 */
@@ -96,14 +99,16 @@ export async function composeApp(input: ComposeInput): Promise<Composed> {
     ...clock,
   });
 
-  // 这一片的可见性是「管理员或创建者」；第 3 片换成带用户组的实现时只改这里（规格 P-10）。
+  // 可见性是「管理员全部；否则创建者或组员」（规格 G-32）；「组在不在」接身份模块的公开查询（规格 G-31）。
+  // 认证结果里的组编号经访问闸进请求上下文，工程的路由处理函数组装给模块（规格 G-34）。
   const projects = createProjectsModule({
     db: input.db,
     repo: input.projects?.repo ?? createProjectsRepo(),
     eventLog,
     root: input.projectsRoot,
     git: input.projects?.git ?? createGitRunner(),
-    canSee: input.projects?.canSee ?? ownerOrAdmin,
+    canSee: input.projects?.canSee ?? callerScope,
+    groupExists: input.projects?.groupExists ?? identity.service.groupExists,
     // 建仓失败时模块要把底层原因连同请求号写进日志（规格 P-05）。
     log: input.log,
     ...clock,

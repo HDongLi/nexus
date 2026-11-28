@@ -45,8 +45,14 @@ describe("事件名", () => {
     }
   });
 
-  it("两段的名字照旧合法；不合规矩的照样不收", () => {
-    for (const name of ["system.started", "issue-tracker.opened", "a.b"]) {
+  it("四段的名字也合法（人员规格的 identity.user.password.reset，2026-11-28 放宽）；两段的照旧合法", () => {
+    for (const name of [
+      "system.started",
+      "issue-tracker.opened",
+      "a.b",
+      "identity.user.password.reset",
+      "projects.visibility.changed",
+    ]) {
       expect(eventName.safeParse(name).success, name).toBe(true);
     }
     for (const name of [
@@ -55,7 +61,7 @@ describe("事件名", () => {
       "Identity.login.succeeded",
       "identity.Login",
       "identity.login.Succeeded",
-      "a.b.c.d",
+      "a.b.c.d.e",
       "a..b",
       "a.b.",
       ".a.b",
@@ -142,9 +148,13 @@ describe("失败码", () => {
 });
 
 describe("路由声明", () => {
-  it("恰好四条路由，访问级别照规格：登录公开，其余要登录（I-01）", () => {
+  // 2026-11-28 起，身份模块交出的是登录会话四条（I-01）加管账号、管用户组的十五条（人员规格 G-01）。
+  it("登录会话四条，访问级别照规格：登录公开，其余要登录（I-01）", () => {
+    const auth = identityContract.routes.filter((declared) =>
+      declared.route.path.startsWith("/api/v1/auth/"),
+    );
     expect(
-      identityContract.routes.map((declared) => [
+      auth.map((declared) => [
         declared.access,
         declared.route.method.toUpperCase(),
         declared.route.path,
@@ -156,17 +166,81 @@ describe("路由声明", () => {
       ["user", "POST", "/api/v1/auth/password"],
     ]);
     // 只有登录和改密收请求体，而且请求体是必填的
-    const hasBody = identityContract.routes.map((declared) => "request" in declared.route);
+    const hasBody = auth.map((declared) => "request" in declared.route);
     expect(hasBody).toEqual([true, false, false, true]);
     for (const declared of identityContract.routes) {
-      if (!("request" in declared.route)) continue;
+      if (!("request" in declared.route) || !("body" in declared.route.request)) continue;
       expect(declared.route.request.body.required, declared.route.path).toBe(true);
     }
+  });
+
+  it("管账号的八条加同事名录一条，访问级别照人员规格（G-01）", () => {
+    const account = identityContract.routes.filter(
+      (declared) =>
+        declared.route.path.startsWith("/api/v1/users") || declared.route.path === "/api/v1/people",
+    );
+    expect(
+      account.map((declared) => [
+        declared.access,
+        declared.route.method.toUpperCase(),
+        declared.route.path,
+      ]),
+    ).toEqual([
+      ["admin", "GET", "/api/v1/users"],
+      ["admin", "POST", "/api/v1/users"],
+      ["admin", "GET", "/api/v1/users/{userId}"],
+      ["admin", "PATCH", "/api/v1/users/{userId}"],
+      ["admin", "POST", "/api/v1/users/{userId}/password"],
+      ["admin", "POST", "/api/v1/users/{userId}/disable"],
+      ["admin", "POST", "/api/v1/users/{userId}/enable"],
+      ["admin", "DELETE", "/api/v1/users/{userId}"],
+      ["user", "GET", "/api/v1/people"],
+    ]);
+  });
+
+  it("用户组六条，都是 admin（G-01）", () => {
+    const group = identityContract.routes.filter((declared) =>
+      declared.route.path.startsWith("/api/v1/groups"),
+    );
+    expect(
+      group.map((declared) => [
+        declared.access,
+        declared.route.method.toUpperCase(),
+        declared.route.path,
+      ]),
+    ).toEqual([
+      ["admin", "GET", "/api/v1/groups"],
+      ["admin", "POST", "/api/v1/groups"],
+      ["admin", "GET", "/api/v1/groups/{groupId}"],
+      ["admin", "PATCH", "/api/v1/groups/{groupId}"],
+      ["admin", "PUT", "/api/v1/groups/{groupId}/members"],
+      ["admin", "DELETE", "/api/v1/groups/{groupId}"],
+    ]);
   });
 
   it("操作名不重复", () => {
     const ids = identityContract.routes.map((declared) => declared.route.operationId);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(["login", "getMe", "logout", "changePassword"]);
+    expect(ids).toEqual([
+      "login",
+      "getMe",
+      "logout",
+      "changePassword",
+      "listUsers",
+      "createUserAccount",
+      "getUserAccount",
+      "updateUserAccount",
+      "resetUserPassword",
+      "disableUserAccount",
+      "enableUserAccount",
+      "deleteUserAccount",
+      "listPeople",
+      "listGroups",
+      "createUserGroup",
+      "getUserGroup",
+      "renameUserGroup",
+      "replaceGroupMembers",
+      "deleteUserGroup",
+    ]);
   });
 });

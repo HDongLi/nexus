@@ -17,6 +17,8 @@ export function createIdentityVerifier(identity: IdentityModule): AccessVerifier
     const session = await identity.service.authenticate(token);
     if (!session) return fail(c, 401, authErrorCodes.required, LOGIN_REQUIRED_MESSAGE);
     c.set("user", session.user);
+    // 认证时顺带取来的用户组编号放进上下文：工程模块判可见性、建工程挂组用它，不再各问一遍（规格 G-34）。
+    c.set("groupIds", session.groupIds);
     // 会话续期了就把同一枚 cookie 重发一遍，浏览器里的有效期跟着往后挪（规格 I-22）。
     if (session.renewed) identity.sessionCookie.set(c, token);
     // 判 admin 级用的就是 isAdmin 这一个字段，和「我是谁」回的是同一个（规格 I-27）。

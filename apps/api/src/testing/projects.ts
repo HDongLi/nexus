@@ -284,10 +284,24 @@ export async function projectsEvents(db: Db, type?: string): Promise<EventRow[]>
   }));
 }
 
-/** 清掉工程模块的表和它发的事件。要先于 clearIdentity：工程记录引用着账号。 */
+/** 清掉工程模块的表和它发的事件。要先于 clearIdentity：工程记录引用着账号，关系表引用着组。 */
 export async function clearProjects(db: Db): Promise<void> {
+  await db.execute(sql`delete from project_groups`);
   await db.execute(sql`delete from projects`);
   await db.execute(sql`delete from events where source = 'projects'`);
+}
+
+/** 直接查关系表：一个组看得见的工程编号，按编号排（和仓储同一个次序）。 */
+export async function projectGroupRows(
+  db: Db,
+): Promise<Array<{ project_id: string; group_id: string }>> {
+  const rows = await db.execute(
+    sql`select project_id, group_id from project_groups order by project_id, group_id`,
+  );
+  return (rows.rows as Array<Record<string, unknown>>).map((row) => ({
+    project_id: row.project_id as string,
+    group_id: row.group_id as string,
+  }));
 }
 
 /** 建一个账号并登录，回账号行和能直接带上的 Cookie 头。 */

@@ -8,6 +8,8 @@ import {
 } from "@nexus/http-kit";
 import type { Context } from "hono";
 import { getCookie } from "hono/cookie";
+import { adminAccountBindings } from "./admin-bindings.ts";
+import { groupBindings } from "./group-bindings.ts";
 import { authErrorCodes } from "./codes.ts";
 import { sessionCookie, type SessionCookie } from "./cookies.ts";
 import { loginRoute, logoutRoute, meRoute, passwordRoute } from "./routes.ts";
@@ -32,6 +34,7 @@ export interface IdentityModule {
 /**
  * 本模块唯一出口（任务书 §5.3）。别的模块和应用只准 import 这一个文件，
  * 依赖方向检查会拦下伸进来的手。处理函数只做三件事：解析入参、调用用例、把结果交回去。
+ * 登录会话的绑定在这里，管账号的绑定在 admin-bindings.ts，用户组的在 group-bindings.ts（设计 03「文件怎么分」）。
  */
 export function createIdentityModule(deps: IdentityModuleDeps): IdentityModule {
   const service = createIdentityService(deps);
@@ -94,33 +97,58 @@ export function createIdentityModule(deps: IdentityModuleDeps): IdentityModule {
             return fail(c, 400, authErrorCodes.passwordReused, "新口令和旧口令一样，换一个");
         }
       }),
+      ...adminAccountBindings(service, deps.passwordMinLength, trace),
+      ...groupBindings(service, trace),
     ],
   };
 }
 
-export { authErrorCodes } from "./codes.ts";
+export { authErrorCodes, identityErrorCodes } from "./codes.ts";
 export {
   LOGIN_FAILED,
   LOGIN_SUCCEEDED,
   LOGOUT,
   PASSWORD_CHANGED,
   USER_CREATED,
+  USER_DELETED,
+  USER_DISABLED,
+  USER_ENABLED,
+  USER_PASSWORD_RESET,
+  USER_UPDATED,
   loginFailedPayload,
   loginSucceededPayload,
   logoutPayload,
   passwordChangedPayload,
   userCreatedPayload,
+  userDeletedPayload,
+  userDisabledPayload,
+  userEnabledPayload,
+  userPasswordResetPayload,
+  userUpdatedPayload,
 } from "./events.ts";
-export { USERNAME_PATTERN } from "./accounts.ts";
+export {
+  GROUP_CREATED,
+  GROUP_DELETED,
+  GROUP_MEMBERS_CHANGED,
+  GROUP_RENAMED,
+  groupCreatedPayload,
+  groupDeletedPayload,
+  groupMembersChangedPayload,
+  groupRenamedPayload,
+} from "./group-events.ts";
+export { USERNAME_PATTERN } from "./names.ts";
 export { SESSION_MAX_AGE_SECONDS } from "./cookies.ts";
-export { identityContract, loginRequest, passwordRequest } from "./routes.ts";
+export { identityContract } from "./routes.ts";
 export { argon2PasswordHasher } from "./password.ts";
 export type { Argon2, PasswordHasher } from "./password.ts";
 export { createIdentityRepo } from "./repo.ts";
 export { createIdentityService } from "./service.ts";
-// 账号表的定义随出口导出（2026-11-27，开发面重置第 2 片）：只给别的模块建引用约束用，别的模块不在它上面读写数据。
-export { identityUsers } from "./schema.ts";
+export type { GroupRejection } from "./groups.ts";
+// 账号表和用户组表的定义随出口导出（2026-11-27 账号、2026-11-28 用户组，开发面重置第 2/3 片）：
+// 只给别的模块建引用约束用，别的模块不在它们上面读写数据。
+export { identityGroups, identityUsers } from "./schema.ts";
 export type { LoginFailedReason } from "./events.ts";
+export type { UserUpdatedChanges } from "./events.ts";
 export type {
   AuthenticatedSession,
   ChangePasswordResult,

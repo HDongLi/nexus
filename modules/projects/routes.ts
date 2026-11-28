@@ -125,8 +125,65 @@ export const updateRoute = route("user", {
   },
 });
 
+/**
+ * 一个组的可见工程那两条（人员规格 G-01、G-31，2026-11-28）：关系表是这个模块的，路由也归它，
+ * 路径跟着用户组走。都是 admin：改的是「谁看得见」，是管理员的活。
+ */
+const groupId = z.string().uuid();
+const groupParams = z.strictObject({ groupId });
+
+/** 编号的数组，没有重复；重复的编号算形状不合（人员规格 G-02）。 */
+const projectIds = z
+  .array(z.string().uuid())
+  .refine((ids) => new Set(ids).size === ids.length, "工程编号有重复");
+
+export const getGroupProjectsRoute = route("admin", {
+  method: "get",
+  path: `${API_PREFIX}/groups/{groupId}/projects`,
+  operationId: "getGroupProjects",
+  summary: "一个组看得见的工程",
+  description: "这个组的成员看得见哪些工程，回工程编号的集合。组不存在回 404。",
+  tags: ["projects"],
+  request: { params: groupParams },
+  responses: {
+    200: json(z.strictObject({ projectIds: z.array(z.string().uuid()) }), "这个组看得见的工程编号"),
+    ...errors(401, 403, 404, 500),
+  },
+});
+
+export const setGroupProjectsRoute = route("admin", {
+  method: "put",
+  path: `${API_PREFIX}/groups/{groupId}/projects`,
+  operationId: "setGroupProjects",
+  summary: "整体替换一个组看得见的工程",
+  description:
+    "请求里的集合换掉原来的集合。和原来一样（不看顺序）也回 200，这时什么都没动。组不存在回 404；工程编号不存在回 400。",
+  tags: ["projects"],
+  request: {
+    params: groupParams,
+    body: {
+      required: true,
+      content: { "application/json": { schema: z.strictObject({ projectIds }) } },
+    },
+  },
+  responses: {
+    200: json(
+      z.strictObject({ projectIds: z.array(z.string().uuid()) }),
+      "换好之后这个组看得见的工程编号",
+    ),
+    ...errors(400, 401, 403, 404, 500),
+  },
+});
+
 /** 契约文档需要的全部内容。 */
 export const projectsContract = {
   name: "projects",
-  routes: [listRoute, createRoute, detailRoute, updateRoute],
+  routes: [
+    listRoute,
+    createRoute,
+    detailRoute,
+    updateRoute,
+    getGroupProjectsRoute,
+    setGroupProjectsRoute,
+  ],
 } as const;

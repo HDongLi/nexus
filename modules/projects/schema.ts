@@ -1,5 +1,5 @@
-import { identityUsers } from "@nexus/identity";
-import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { identityGroups, identityUsers } from "@nexus/identity";
+import { index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 /**
  * 工程模块的一张表（设计 02「表」）。只声明表，不依赖本模块的任何别的文件。
@@ -31,3 +31,25 @@ export const projects = pgTable("projects", {
   /** 建成时等于创建时间；显示名或头像字真的变了才动（规格 P-31）。 */
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
 });
+
+/**
+ * 「哪个组看得见哪些工程」的关系（设计 03「表」，规格 G-31）。这份关系归工程模块，
+ * 组本身归身份模块：这里的组编号引用身份模块出口导出的表定义，不伸进它的内部文件（规格 G-31）。
+ * 删工程、删组时关系随外键一起没了；删组不经过工程模块的代码，也不发工程的事件（规格 G-30、G-39）。
+ */
+export const projectGroups = pgTable(
+  "project_groups",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => identityGroups.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.groupId] }),
+    // 按组读可见的工程、认证时按人取组再查关系，都走这个索引（设计 03「表」）。
+    index("project_groups_group_id_idx").on(table.groupId),
+  ],
+);

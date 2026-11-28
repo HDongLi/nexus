@@ -4,6 +4,7 @@ import { PROJECT_UPDATED } from "./events.ts";
 import { GitError } from "./git.ts";
 import { projectRow, T0 } from "./testing/fake.ts";
 import { ALICE_CALLER, BOB, CHIEF, setup, type Harness } from "./testing/setup.ts";
+import type { Visibility } from "./shared.ts";
 
 const SECOND = 1000;
 /** 甲先建的一个（早一秒）、甲后建的一个、乙建的一个。后两个同一毫秒建成，按编号降序排。 */
@@ -17,6 +18,14 @@ const seed = () => [
 ];
 const HEAD = `${"c0ffee".repeat(6)}abcd\n2026-11-27T08:00:00+08:00\nInitial commit\n`;
 
+/** 恒假的范围：什么都匹配不上（规格 P-10 的「接恒假的判定」）。 */
+const nobodyScope: Visibility = () => ({
+  kind: "filtered",
+  creatorId: "00000000-0000-4000-8000-000000000000",
+  groupIds: [],
+});
+/** 恒真的范围：全都在（P-10 的「接恒真的判定」）。 */
+const everyoneScope: Visibility = () => ({ kind: "all" });
 const opened: Harness[] = [];
 
 afterEach(async () => {
@@ -53,7 +62,7 @@ describe("清单（规格 P-08 到 P-10）", () => {
   });
 
   it("可见性判定是构造时换进来的：恒假，清单为空、详情和改都当作不存在；恒真，全都在（P-10）", async () => {
-    const nobody = await open({ seed: seed(), canSee: () => false });
+    const nobody = await open({ seed: seed(), canSee: nobodyScope });
     expect(await slugs(nobody, ALICE_CALLER)).toEqual([]);
     expect(await nobody.service.get(ALICE_CALLER, SECOND_PROJECT)).toBeUndefined();
     expect(await nobody.service.update(ALICE_CALLER, SECOND_PROJECT, { avatar: "乙" })).toEqual({
@@ -61,7 +70,7 @@ describe("清单（规格 P-08 到 P-10）", () => {
     });
     expect(nobody.git.calls).toEqual([]);
 
-    const everyone = await open({ seed: seed(), canSee: () => true });
+    const everyone = await open({ seed: seed(), canSee: everyoneScope });
     everyone.git.headOutput = HEAD;
     expect(await slugs(everyone, BOB)).toEqual(["bobs", "second", "first"]);
     expect(await everyone.service.get(BOB, SECOND_PROJECT)).toMatchObject({
@@ -129,7 +138,7 @@ describe("详情（规格 P-11、P-25、P-26）", () => {
 
 describe("改显示名和头像字（规格 P-29 到 P-33）", () => {
   it("看得见但不是自己建的、也不是管理员：forbidden，不动库、不发事件（P-29）", async () => {
-    const harness = await open({ seed: seed(), canSee: () => true });
+    const harness = await open({ seed: seed(), canSee: everyoneScope });
     expect(await harness.service.update(BOB, FIRST, { displayName: "乙改的" })).toEqual({
       kind: "forbidden",
     });

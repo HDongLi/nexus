@@ -1,7 +1,13 @@
 import type { Executor } from "@nexus/db";
-import { and, eq, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { FAILURE_WINDOW_MS, type FailureRecord } from "./lockout.ts";
-import { identityLoginFailures, identitySessions, identityUsers } from "./schema.ts";
+import {
+  identityGroupMembers,
+  identityGroups,
+  identityLoginFailures,
+  identitySessions,
+  identityUsers,
+} from "./schema.ts";
 
 /**
  * 本模块唯一写 SQL 的地方（铁律 4）。做成接口是为了能单独换成假的来测用例，也能在写入后故意抛错
@@ -12,6 +18,10 @@ export type UserRecord = typeof identityUsers.$inferSelect;
 export type NewUser = typeof identityUsers.$inferInsert;
 export type SessionRecord = typeof identitySessions.$inferSelect;
 export type NewSession = typeof identitySessions.$inferInsert;
+export type GroupRecord = typeof identityGroups.$inferSelect;
+export type NewGroup = typeof identityGroups.$inferInsert;
+export type GroupMemberRecord = typeof identityGroupMembers.$inferSelect;
+export type NewGroupMember = typeof identityGroupMembers.$inferInsert;
 type FailureRow = typeof identityLoginFailures.$inferSelect;
 
 export interface UserRepo {
@@ -20,7 +30,23 @@ export interface UserRepo {
   findById(ex: Executor, id: string): Promise<UserRecord | undefined>;
   insert(ex: Executor, row: NewUser): Promise<UserRecord>;
   updatePasswordHash(ex: Executor, id: string, passwordHash: string, at: Date): Promise<void>;
+  setDisplayName(ex: Executor, id: string, displayName: string, at: Date): Promise<void>;
+  setIsAdmin(ex: Executor, id: string, isAdmin: boolean, at: Date): Promise<void>;
   setDisabledAt(ex: Executor, id: string, disabledAt: Date | null, at: Date): Promise<void>;
+  /** 删掉账号这一行；会话和组成员关系随外键级联。工程表会拦住建过工程的（规格 G-21）。 */
+  delete(ex: Executor, id: string): Promise<void>;
+  /** 全部账号，用户名升序（规格 G-06）。停用的也在内。 */
+  listAll(ex: Executor): Promise<UserRecord[]>;
+  /** 全部启用的账号，用户名升序（规格 G-07）。 */
+  listEnabled(ex: Executor): Promise<UserRecord[]>;
+  /** 这些编号里真实存在的（停用的也算存在，规格 G-27）。回存在的编号本身。 */
+  existingIds(ex: Executor, ids: string[]): Promise<string[]>;
+  /**
+   * 锁住全部「管理员位为真且没停用」的行，回锁到的行数（规格 G-20）。
+   * 数出来是 1 以外就还有别的启用管理员，降级、停用、删号都动得；数出来是 1 就是最后一个。
+   * 系统始终至少有一个启用的管理员，总有行可锁，不用占位。
+   */
+  lockEnabledAdmins(tx: Executor): Promise<number>;
 }
 
 export interface SessionRepo {
@@ -57,6 +83,26 @@ export interface LockoutRepo {
   prune(ex: Executor, ownKey: string, now: Date): Promise<number>;
 }
 
+export interface GroupRepo {
+  findById(ex: Executor, id: string): Promise<GroupRecord | undefined>;
+  /** 按小写的组名找。组名不许两个只差大小写，所以这样找不会有两个结果（规格 G-25）。 */
+  findByNameLower(ex: Executor, nameLower: string): Promise<GroupRecord | undefined>;
+  /** 全部用户组，创建早的在前（规格 G-01 的表）。 */
+  listAll(ex: Executor): Promise<GroupRecord[]>;
+  insert(ex: Executor, row: NewGroup): Promise<GroupRecord>;
+  rename(ex: Executor, id: string, name: string, at: Date): Promise<void>;
+  /** 删掉组这一行；成员关系随外键级联（规格 G-30）。 */
+  delete(ex: Executor, id: string): Promise<void>;
+  /** 一个组的成员编号，按成员关系写入的先后。 */
+  memberIds(ex: Executor, groupId: string): Promise<string[]>;
+  /** 一个组的成员数（删组的事件里要带，规格事件表）。 */
+  memberCount(ex: Executor, groupId: string): Promise<number>;
+  /** 整体替换一个组的成员：先删光再按给定顺序插回去（规格 G-28）。 */
+  replaceMembers(tx: Executor, groupId: string, userIds: string[]): Promise<void>;
+  /** 这个人所属的用户组编号。停用不摘组，行一直在（规格 G-17）。 */
+  groupIdsForUser(ex: Executor, userId: string): Promise<string[]>;
+}
+
 /** 占位行插进去到读出来之间，可能被另一个事务删掉。最多试这么多回。 */
 const LOCK_ATTEMPTS = 3;
 
@@ -64,6 +110,7 @@ export interface IdentityRepo {
   users: UserRepo;
   sessions: SessionRepo;
   failures: LockoutRepo;
+  groups: GroupRepo;
 }
 
 function toFailure(row: FailureRow): FailureRecord {
@@ -99,11 +146,112 @@ const users: UserRepo = {
       .set({ passwordHash, passwordChangedAt: at, updatedAt: at })
       .where(eq(identityUsers.id, id));
   },
+  async setDisplayName(ex, id, displayName, at) {
+    await ex
+      .update(identityUsers)
+      .set({ displayName, updatedAt: at })
+      .where(eq(identityUsers.id, id));
+  },
+  async setIsAdmin(ex, id, isAdmin, at) {
+    await ex.update(identityUsers).set({ isAdmin, updatedAt: at }).where(eq(identityUsers.id, id));
+  },
   async setDisabledAt(ex, id, disabledAt, at) {
     await ex
       .update(identityUsers)
       .set({ disabledAt, updatedAt: at })
       .where(eq(identityUsers.id, id));
+  },
+  async delete(ex, id) {
+    await ex.delete(identityUsers).where(eq(identityUsers.id, id));
+  },
+  async listAll(ex) {
+    return ex.select().from(identityUsers).orderBy(asc(identityUsers.username));
+  },
+  async listEnabled(ex) {
+    return ex
+      .select()
+      .from(identityUsers)
+      .where(isNull(identityUsers.disabledAt))
+      .orderBy(asc(identityUsers.username));
+  },
+  async existingIds(ex, ids) {
+    if (ids.length === 0) return [];
+    const rows = await ex
+      .select({ id: identityUsers.id })
+      .from(identityUsers)
+      .where(inArray(identityUsers.id, ids));
+    return rows.map((row) => row.id);
+  },
+  async lockEnabledAdmins(ex) {
+    const rows = await ex
+      .select()
+      .from(identityUsers)
+      .where(and(eq(identityUsers.isAdmin, true), isNull(identityUsers.disabledAt)))
+      .for("update");
+    return rows.length;
+  },
+};
+
+const groups: GroupRepo = {
+  async findById(ex, id) {
+    const rows = await ex.select().from(identityGroups).where(eq(identityGroups.id, id));
+    return rows[0];
+  },
+  async findByNameLower(ex, nameLower) {
+    const rows = await ex
+      .select()
+      .from(identityGroups)
+      .where(sql`lower(${identityGroups.name}) = ${nameLower}`);
+    return rows[0];
+  },
+  async listAll(ex) {
+    // 创建早的在前（规格 G-01 的表）；同一时刻的按编号排，次序才稳定。
+    return ex
+      .select()
+      .from(identityGroups)
+      .orderBy(asc(identityGroups.createdAt), asc(identityGroups.id));
+  },
+  async insert(ex, row) {
+    const rows = await ex.insert(identityGroups).values(row).returning();
+    const inserted = rows[0];
+    if (!inserted) throw new Error("用户组写进去了却读不回来");
+    return inserted;
+  },
+  async rename(ex, id, name, at) {
+    await ex.update(identityGroups).set({ name, updatedAt: at }).where(eq(identityGroups.id, id));
+  },
+  async delete(ex, id) {
+    await ex.delete(identityGroups).where(eq(identityGroups.id, id));
+  },
+  async memberIds(ex, groupId) {
+    // 按编号排：集合的顺序本不表示什么（规格「路由与总则」），给一个稳定的次序，前后两次读才好比。
+    const rows = await ex
+      .select({ userId: identityGroupMembers.userId })
+      .from(identityGroupMembers)
+      .where(eq(identityGroupMembers.groupId, groupId))
+      .orderBy(asc(identityGroupMembers.userId));
+    return rows.map((row) => row.userId);
+  },
+  async memberCount(ex, groupId) {
+    const rows = await ex
+      .select({ userId: identityGroupMembers.userId })
+      .from(identityGroupMembers)
+      .where(eq(identityGroupMembers.groupId, groupId));
+    return rows.length;
+  },
+  async replaceMembers(ex, groupId, userIds) {
+    await ex.delete(identityGroupMembers).where(eq(identityGroupMembers.groupId, groupId));
+    if (userIds.length > 0) {
+      await ex.insert(identityGroupMembers).values(userIds.map((userId) => ({ groupId, userId })));
+    }
+  },
+  async groupIdsForUser(ex, userId) {
+    const rows = await ex
+      .select({ groupId: identityGroupMembers.groupId })
+      .from(identityGroupMembers)
+      .where(eq(identityGroupMembers.userId, userId))
+      .orderBy(asc(identityGroupMembers.groupId));
+    return rows.map((row) => row.groupId);
   },
 };
 
@@ -225,5 +373,5 @@ const failures: LockoutRepo = {
 };
 
 export function createIdentityRepo(): IdentityRepo {
-  return { users, sessions, failures };
+  return { users, sessions, failures, groups };
 }

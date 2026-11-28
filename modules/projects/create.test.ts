@@ -102,7 +102,10 @@ describe("新建", () => {
     expect(harness.repo.state.projects).toHaveLength(1);
     // 占用者看不看得见都一样回：换一个看不见这条记录的人
     expect(
-      await harness.service.create({ id: "someone-else", isAdmin: false }, { slug: "alpha" }),
+      await harness.service.create(
+        { id: "someone-else", isAdmin: false, groupIds: [] },
+        { slug: "alpha" },
+      ),
     ).toEqual({
       kind: "slug_taken",
     });

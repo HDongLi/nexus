@@ -1,5 +1,10 @@
 import { PROJECT_UPDATED, type ProjectUpdatedChanges } from "./events.ts";
 import { create } from "./create.ts";
+import {
+  listGroupProjects,
+  setGroupProjects,
+  type GroupProjectsResult,
+} from "./group-visibility.ts";
 import { normalizeAvatar, normalizeDisplayName } from "./names.ts";
 import type { ProjectRecord } from "./repo.ts";
 import { readHead } from "./repository.ts";
@@ -16,7 +21,8 @@ import {
 } from "./shared.ts";
 
 /**
- * 工程模块的用例：清单、详情、改显示名和头像字在这里，新建在 create.ts。
+ * 工程模块的用例：清单、详情、改显示名和头像字在这里，新建在 create.ts，
+ * 一个组的可见工程在 group-visibility.ts。业务规则只住在这三个文件里。
  * 这一行到 300 行是上限，超了就拆，不调限额（任务书 P11）。
  */
 
@@ -39,6 +45,15 @@ export interface ProjectsService {
     input: UpdateProjectInput,
     traceId?: string | undefined,
   ): Promise<UpdateProjectResult>;
+  /** 一个组看得见的工程：读（规格 G-01 的表）。组不存在回 not_found。 */
+  listGroupProjects(groupId: string): Promise<GroupProjectsResult>;
+  /** 一个组看得见的工程：整体替换（规格 G-28）。actorId 是操作者的账号编号。 */
+  setGroupProjects(
+    actorId: string,
+    groupId: string,
+    projectIds: string[],
+    traceId?: string | undefined,
+  ): Promise<GroupProjectsResult>;
 }
 
 export function createProjectsService(deps: ProjectsServiceDeps): ProjectsService {
@@ -48,14 +63,17 @@ export function createProjectsService(deps: ProjectsServiceDeps): ProjectsServic
     create: (caller, input, traceId) => create(ctx, caller, input, traceId),
     get: (caller, id) => get(ctx, caller, id),
     update: (caller, id, input, traceId) => update(ctx, caller, id, input, traceId),
+    listGroupProjects: (groupId) => listGroupProjects(ctx, groupId),
+    setGroupProjects: (actorId, groupId, projectIds, traceId) =>
+      setGroupProjects(ctx, actorId, groupId, projectIds, traceId),
   };
 }
 
 async function list(ctx: ProjectsContext, caller: Caller): Promise<ProjectRecord[]> {
   const { deps } = ctx;
   // 清单不跑 git：旧系统每个工程跑 3 到 4 次，页面每 5 秒重取一次（规格 P-09 的来源）。
-  const all = await deps.repo.listAll(deps.db);
-  return all.filter((project) => deps.canSee(project, caller));
+  // 可见性交出范围，仓储照它在库里过滤（规格 G-32）。
+  return deps.repo.listVisible(deps.db, deps.canSee(caller));
 }
 
 async function get(
@@ -64,9 +82,9 @@ async function get(
   id: string,
 ): Promise<ProjectDetail | undefined> {
   const { deps } = ctx;
-  const record = await deps.repo.findById(deps.db, id);
   // 看不见和不存在回得一样，由处理函数回同一个 404（规格 P-11）。
-  if (record === undefined || !deps.canSee(record, caller)) return undefined;
+  const record = await deps.repo.visibleById(deps.db, id, deps.canSee(caller));
+  if (record === undefined) return undefined;
   const head = await readHead({ root: deps.root, id, git: deps.git });
   return { project: record, head };
 }
@@ -80,8 +98,8 @@ async function update(
   traceId: string | undefined,
 ): Promise<UpdateProjectResult> {
   const { deps } = ctx;
-  const record = await deps.repo.findById(deps.db, id);
-  if (record === undefined || !deps.canSee(record, caller)) return { kind: "not_found" };
+  const record = await deps.repo.visibleById(deps.db, id, deps.canSee(caller));
+  if (record === undefined) return { kind: "not_found" };
   // 只有创建者和管理员能改；看得见但不属这两种的回 403（规格 P-29）。
   if (record.createdById !== caller.id && !caller.isAdmin) return { kind: "forbidden" };
 

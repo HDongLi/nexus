@@ -1,6 +1,7 @@
 import { isUniqueViolation, type Tx } from "@nexus/db";
 import { randomUUID } from "node:crypto";
 import { PASSWORD_CHANGED, USER_CREATED } from "./events.ts";
+import { USERNAME_PATTERN } from "./names.ts";
 import { MAX_PASSWORD_LENGTH } from "./password.ts";
 import type { UserRecord } from "./repo.ts";
 import {
@@ -14,10 +15,11 @@ import { hashToken, newSessionToken, SESSION_TTL_MS } from "./tokens.ts";
 
 /**
  * 账号自己的三件事：本人改密、建号、停用。登录和会话在 service.ts。
+ * 管理员管账号的用例在 admin-accounts.ts，建号从这里的 createUser 走（同一个事务、同一个事件形状）。
  */
 
-/** 用户名的规则：字母、数字、下划线、连字符，1 到 64 个字符（规格 I-34）。 */
-export const USERNAME_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+// 用户名的规则住在 names.ts（纯规则，路由声明和用例校验共用）；这里转出口给老的引用方。
+export { USERNAME_PATTERN };
 
 /**
  * 本人改密（规格 I-30 到 I-33）。查的顺序：会话、锁定、新口令长度、旧口令、新旧相同。
@@ -72,12 +74,22 @@ export async function changePassword(
 }
 
 /**
- * 建账号（规格 I-46、I-48）。建出来的账号未停用，显示名等于用户名。
- * 四种拒绝都不写库，理由交给调用方去说。
+ * 建账号（规格 I-46、I-48；管理员建号同走这里，规格 G-08 到 G-11）。建出来的账号未停用，
+ * 显示名没给就等于用户名。四种拒绝都不写库，理由交给调用方去说。
+ * via 是 admin 时必须带操作者的编号（规格事件表）；命令行没有请求号，管理员建的带。
  */
 export async function createUser(
   ctx: IdentityContext,
-  input: { username: string; password: string; isAdmin: boolean },
+  input: {
+    username: string;
+    password: string;
+    isAdmin: boolean;
+    /** 已经按显示名的规则收好的值（规格 G-12）；没给就是用户名。 */
+    displayName?: string | undefined;
+    via?: "cli" | "admin";
+    actorId?: string | undefined;
+    traceId?: string | undefined;
+  },
 ): Promise<CreateUserResult> {
   const { deps } = ctx;
   if (!USERNAME_PATTERN.test(input.username)) {
@@ -96,11 +108,12 @@ export async function createUser(
 
   const passwordHash = await ctx.password.hash(input.password);
   const at = ctx.now();
+  const via = input.via ?? "cli";
   const insert = async (tx: Tx): Promise<UserRecord> => {
     const row = await deps.repo.users.insert(tx, {
       id: randomUUID(),
       username: input.username,
-      displayName: input.username,
+      displayName: input.displayName ?? input.username,
       passwordHash,
       isAdmin: input.isAdmin,
       disabledAt: null,
@@ -112,8 +125,13 @@ export async function createUser(
       tx,
       USER_CREATED,
       input.username,
-      { userId: row.id, isAdmin: input.isAdmin, via: "cli" },
-      undefined,
+      {
+        userId: row.id,
+        isAdmin: input.isAdmin,
+        via,
+        ...(via === "admin" && input.actorId !== undefined ? { actorId: input.actorId } : {}),
+      },
+      input.traceId,
     );
     return row;
   };

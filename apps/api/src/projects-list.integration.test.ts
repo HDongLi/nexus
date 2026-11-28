@@ -2,6 +2,7 @@ import type { DatabaseHandle } from "@nexus/db";
 import { join } from "node:path";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { boot, call, createTestDatabase, T0, type Reply } from "./testing/kit.ts";
+import type { Visibility } from "@nexus/projects";
 import {
   PROJECTS,
   cannedGit,
@@ -42,6 +43,15 @@ beforeEach(async () => {
 });
 
 const MISSING = "30000000-0000-4000-8000-0000000000ff";
+
+/** 恒假的范围：什么都匹配不上（规格 P-10 的「接恒假的判定」）。 */
+const nobodyScope: Visibility = () => ({
+  kind: "filtered",
+  creatorId: "00000000-0000-4000-8000-000000000000",
+  groupIds: [],
+});
+/** 恒真的范围：全都在（P-10 的「接恒真的判定」）。 */
+const everyoneScope: Visibility = () => ({ kind: "all" });
 
 const idsOf = async (
   app: Awaited<ReturnType<typeof boot>>["app"],
@@ -118,7 +128,7 @@ describe("清单（规格 P-08 到 P-10）", () => {
     ).id;
 
     const nobody = await restage(database.db, root, troupe, {
-      canSee: () => false,
+      canSee: nobodyScope,
       git: cannedGit(),
     });
     expect(
@@ -129,7 +139,7 @@ describe("清单（规格 P-08 到 P-10）", () => {
     ).toBe(404);
 
     const everyone = await restage(database.db, root, troupe, {
-      canSee: () => true,
+      canSee: everyoneScope,
       git: cannedGit(),
     });
     // 同一条记录、同一个调用者（乙，不是创建者）：只换了判定

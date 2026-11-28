@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { PROJECT_CREATED } from "./events.ts";
+import { PROJECT_CREATED, VISIBILITY_CHANGED } from "./events.ts";
 import { projectTitle } from "./initial-files.ts";
 import { normalizeAvatar, normalizeDisplayName } from "./names.ts";
 import type { NewProject } from "./repo.ts";
@@ -13,7 +13,8 @@ import {
 } from "./shared.ts";
 
 /**
- * 新建（设计 02「建仓」）：校验在路由那一层；这里先查短名、建仓库，再开事务写记录、发事件。
+ * 新建（设计 02「建仓」、设计 03「工程模块这一侧」）：校验在路由那一层；这里先查短名、建仓库，
+ * 再开事务写记录、挂组、发事件——一次提交（规格 G-34）。
  * 任何一步失败都回到什么都没发生过（规格 P-20）。
  */
 export async function create(
@@ -61,11 +62,29 @@ export async function create(
         { projectId: id, slug: input.slug, actorId: caller.id },
         traceId,
       );
+      // 建工程自动挂组（规格 G-34）：创建者所属的每个组都加上它，建完立刻生效。
+      // 上下文里没有组就什么都不加，也不建组。每个组发一条自己的事件，subject 是组编号。
+      for (const groupId of caller.groupIds) {
+        const before = await deps.repo.projectIdsForGroup(tx, groupId);
+        await deps.repo.insertProjectGroups(tx, groupId, [id]);
+        await ctx.emit(
+          tx,
+          VISIBILITY_CHANGED,
+          groupId,
+          {
+            groupId,
+            actorId: caller.id,
+            changes: { projectIds: { from: before, to: [...before, id] } },
+            cause: "project_created",
+          },
+          traceId,
+        );
+      }
       return inserted;
     });
     return { kind: "ok", project };
   } catch (err) {
-    // 记录没落下，仓库就不能留：不然是「有仓库没记录」（规格 P-06、P-20）。
+    // 记录没落下，仓库就不能留：不然是「有仓库没记录」（规格 P-06、P-20）。组也不动（规格 G-34）。
     await ctx.discard(id, traceId);
     // 查重之后、写进来之前，另一个请求用同一个短名建成了：撞上唯一约束，不算建仓失败（规格 P-21）。
     if (isUniqueViolation(err)) return { kind: "slug_taken" };

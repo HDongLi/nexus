@@ -20,3 +20,21 @@ export function isUniqueViolation(err: unknown): boolean {
   }
   return false;
 }
+
+/**
+ * Postgres 的「引用约束不许」：`ON DELETE RESTRICT`（SQLSTATE 23001）和一般的外键拒绝（23503）。
+ *
+ * 两个都要认（2026-11-28，人员模块删号实弹约定）：这套进程内的库基于新版的 Postgres，
+ * RESTRICT 被拒绝时报 23001，老版本的 Postgres 报 23503；只认一个就会把 409 翻译成 500。
+ * 删账号时全库只有工程的 `projects.created_by_id` 是 RESTRICT，所以被拦下的唯一原因就是
+ * 「这个账号建过工程」（规格 G-21）。cause 链的走法同 isUniqueViolation。
+ */
+export function isForeignKeyViolation(err: unknown): boolean {
+  let current = err;
+  for (let depth = 0; depth < 8 && typeof current === "object" && current !== null; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (code === "23001" || code === "23503") return true;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return false;
+}

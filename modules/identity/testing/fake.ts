@@ -1,7 +1,16 @@
-import type { Db, Tx } from "@nexus/db";
+import type { Db, Executor, Tx } from "@nexus/db";
 import type { EmitInput, EventRecord } from "@nexus/event-log";
 import { FAILURE_WINDOW_MS, type FailureRecord } from "../lockout.ts";
-import type { IdentityRepo, NewSession, NewUser, SessionRecord, UserRecord } from "../repo.ts";
+import type {
+  GroupMemberRecord,
+  GroupRecord,
+  IdentityRepo,
+  NewGroup,
+  NewSession,
+  NewUser,
+  SessionRecord,
+  UserRecord,
+} from "../repo.ts";
 
 /**
  * 给单元测试用的替身：仓储、数据库、事件日志、时钟都放在内存里，不碰真的库。
@@ -28,23 +37,47 @@ export function userRow(overrides: Partial<UserRecord> = {}): UserRecord {
   };
 }
 
+/** 一个用户组；memberIds 不在组这一行上，另外往 state.members 里放。 */
+export function groupRow(overrides: Partial<GroupRecord> = {}): GroupRecord {
+  return {
+    id: "20000000-0000-4000-8000-00000000000a",
+    name: "dev",
+    createdAt: T0,
+    updatedAt: T0,
+    ...overrides,
+  };
+}
+
 export interface FakeRepo extends IdentityRepo {
   state: {
     users: UserRecord[];
     sessions: SessionRecord[];
     failures: Map<string, FailureRecord>;
-    /** 每次写入之后可以在这里故意抛错，验「写入失败时事件一起回滚」之外的路径。 */
+    groups: GroupRecord[];
+    /** 成员关系，(groupId, userId) 一行，写入的先后就是数组的先后。 */
+    members: GroupMemberRecord[];
+    /** 设了，删账号（或任何 users.delete）时照真库的形状抛引用约束：建过工程的删不掉。 */
+    failOnUserDelete?: unknown;
+    /** 设了，插用户组（或任何 groups.insert）时照真库的形状抛唯一约束：组名撞了。 */
+    failOnGroupInsert?: unknown;
   };
 }
 
 export function createFakeRepo(
-  seed: { users?: UserRecord[] | undefined; sessions?: SessionRecord[] | undefined } = {},
+  seed: {
+    users?: UserRecord[] | undefined;
+    sessions?: SessionRecord[] | undefined;
+    groups?: GroupRecord[] | undefined;
+    members?: GroupMemberRecord[] | undefined;
+  } = {},
 ): FakeRepo {
   // 预置的行复制一份再收：用例会就地改它们，直接收引用的话，一个测试改过的行会漏给下一个测试。
   const state: FakeRepo["state"] = {
     users: (seed.users ?? []).map((user) => ({ ...user })),
     sessions: (seed.sessions ?? []).map((session) => ({ ...session })),
     failures: new Map(),
+    groups: (seed.groups ?? []).map((group) => ({ ...group })),
+    members: (seed.members ?? []).map((member) => ({ ...member })),
   };
   const touch = (user: UserRecord | undefined, at: Date): UserRecord | undefined => {
     if (user) user.updatedAt = at;
@@ -71,12 +104,52 @@ export function createFakeRepo(
         );
         if (user) user.passwordHash = passwordHash;
       },
+      async setDisplayName(_ex, id, displayName, at) {
+        const user = touch(
+          state.users.find((u) => u.id === id),
+          at,
+        );
+        if (user) user.displayName = displayName;
+      },
+      async setIsAdmin(_ex, id, isAdmin, at) {
+        const user = touch(
+          state.users.find((u) => u.id === id),
+          at,
+        );
+        if (user) user.isAdmin = isAdmin;
+      },
       async setDisabledAt(_ex, id, disabledAt, at) {
         const user = touch(
           state.users.find((u) => u.id === id),
           at,
         );
         if (user) user.disabledAt = disabledAt;
+      },
+      async delete(_ex, id) {
+        // 真库先拒绝、什么都没动（规格 G-21）；这里也先抛，行都留着。
+        if (state.failOnUserDelete !== undefined) throw state.failOnUserDelete;
+        // 会话和成员关系随外键级联；这里照真库的形状一并摘掉。
+        state.sessions = state.sessions.filter((session) => session.userId !== id);
+        state.members = state.members.filter((member) => member.userId !== id);
+        state.users = state.users.filter((user) => user.id !== id);
+      },
+      async listAll(_ex) {
+        return [...state.users]
+          .sort((a, b) => (a.username < b.username ? -1 : 1))
+          .map((user) => ({ ...user }));
+      },
+      async listEnabled(_ex) {
+        return [...state.users]
+          .filter((user) => user.disabledAt === null)
+          .sort((a, b) => (a.username < b.username ? -1 : 1))
+          .map((user) => ({ ...user }));
+      },
+      async existingIds(_ex, ids) {
+        const known = new Set(state.users.map((user) => user.id));
+        return ids.filter((id) => known.has(id));
+      },
+      async lockEnabledAdmins(_ex: Executor) {
+        return state.users.filter((user) => user.isAdmin && user.disabledAt === null).length;
       },
     },
     sessions: {
@@ -167,6 +240,62 @@ export function createFakeRepo(
           }
         }
         return count;
+      },
+    },
+    groups: {
+      async findById(_ex, id) {
+        return state.groups.find((group) => group.id === id);
+      },
+      async findByNameLower(_ex, nameLower) {
+        return state.groups.find((group) => group.name.toLowerCase() === nameLower);
+      },
+      async listAll(_ex) {
+        // 创建早的在前（规格 G-01 的表）；同一时刻的按编号排，次序才稳定。
+        return [...state.groups]
+          .sort(
+            (a, b) =>
+              a.createdAt.getTime() - b.createdAt.getTime() ||
+              (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+          )
+          .map((group) => ({ ...group }));
+      },
+      async insert(_ex, row: NewGroup) {
+        if (state.failOnGroupInsert !== undefined) throw state.failOnGroupInsert;
+        const stored = { ...row } as GroupRecord;
+        state.groups.push(stored);
+        return stored;
+      },
+      async rename(_ex, id, name, at) {
+        const group = state.groups.find((g) => g.id === id);
+        if (group) {
+          group.name = name;
+          group.updatedAt = at;
+        }
+      },
+      async delete(_ex, id) {
+        // 成员关系随外键级联；工程模块的关系表是它自己的事，这里管不着。
+        state.members = state.members.filter((member) => member.groupId !== id);
+        state.groups = state.groups.filter((group) => group.id !== id);
+      },
+      async memberIds(_ex, groupId) {
+        // 按编号排，和真仓储同一个次序（repo.ts 的 memberIds）。
+        return state.members
+          .filter((member) => member.groupId === groupId)
+          .map((member) => member.userId)
+          .sort();
+      },
+      async memberCount(_ex, groupId) {
+        return state.members.filter((member) => member.groupId === groupId).length;
+      },
+      async replaceMembers(_ex, groupId, userIds) {
+        state.members = state.members.filter((member) => member.groupId !== groupId);
+        for (const userId of userIds) state.members.push({ groupId, userId });
+      },
+      async groupIdsForUser(_ex, userId) {
+        return state.members
+          .filter((member) => member.userId === userId)
+          .map((member) => member.groupId)
+          .sort();
       },
     },
   };

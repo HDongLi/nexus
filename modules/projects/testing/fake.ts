@@ -2,6 +2,7 @@ import type { Db, Tx } from "@nexus/db";
 import type { EmitInput, EventRecord } from "@nexus/event-log";
 import { GitError, type GitOutput, type GitRunner } from "../git.ts";
 import type { NewProject, ProjectRecord, ProjectRepo } from "../repo.ts";
+import type { VisibilityScope } from "../repo.ts";
 
 /**
  * 给单元测试用的替身：仓储、数据库、事件日志、git 执行器、时钟都在内存里，不碰真的库。
@@ -26,15 +27,24 @@ export function projectRow(overrides: Partial<ProjectRecord> = {}): ProjectRecor
 }
 
 export interface FakeRepo extends ProjectRepo {
-  state: { projects: ProjectRecord[] };
+  state: {
+    projects: ProjectRecord[];
+    /** 关系表的行：(projectId, groupId)。可见性的范围过滤照它算。 */
+    groups: Array<{ projectId: string; groupId: string }>;
+  };
   /** 设了，每条记录写进去之后都抛它：验「记录写不进库时回到什么都没发生过」（规格 P-20）。 */
   failAfterInsert?: unknown;
 }
 
 export function createFakeRepo(seed: ProjectRecord[] = []): FakeRepo {
   // 预置的行复制一份再收：用例会就地改它们，直接收引用的话，一个测试改过的行会漏给下一个测试。
-  const state: FakeRepo["state"] = { projects: seed.map((project) => ({ ...project })) };
+  const state: FakeRepo["state"] = {
+    projects: seed.map((project) => ({ ...project })),
+    groups: [],
+  };
   const find = (id: string): ProjectRecord | undefined => state.projects.find((p) => p.id === id);
+  const groupVisible = (projectId: string, groupIds: string[]): boolean =>
+    state.groups.some((row) => row.projectId === projectId && groupIds.includes(row.groupId));
   const repo: FakeRepo = {
     state,
     async findBySlug(_ex, slug) {
@@ -45,13 +55,14 @@ export function createFakeRepo(seed: ProjectRecord[] = []): FakeRepo {
     },
     async listAll() {
       // 和真仓储一样：创建时间降序，同一时刻按编号降序。
-      return [...state.projects]
-        .sort(
-          (a, b) =>
-            b.createdAt.getTime() - a.createdAt.getTime() ||
-            (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
-        )
-        .map((project) => ({ ...project }));
+      return sortedProjects();
+    },
+    async listVisible(_ex, scope) {
+      return sortedProjects().filter((project) => visible(project, scope));
+    },
+    async visibleById(_ex, id, scope) {
+      const project = find(id);
+      return project !== undefined && visible(project, scope) ? { ...project } : undefined;
     },
     async insert(_ex, row: NewProject) {
       if (state.projects.some((p) => p.slug === row.slug)) {
@@ -74,7 +85,41 @@ export function createFakeRepo(seed: ProjectRecord[] = []): FakeRepo {
       project.avatar = profile.avatar;
       project.updatedAt = at;
     },
+    async existingIds(_ex, ids) {
+      const known = new Set(state.projects.map((project) => project.id));
+      return ids.filter((id) => known.has(id));
+    },
+    async projectIdsForGroup(_ex, groupId) {
+      return state.groups
+        .filter((row) => row.groupId === groupId)
+        .map((row) => row.projectId)
+        .sort();
+    },
+    async replaceProjectsForGroup(_ex, groupId, projectIds) {
+      state.groups = state.groups.filter((row) => row.groupId !== groupId);
+      for (const projectId of projectIds) state.groups.push({ groupId, projectId });
+    },
+    async insertProjectGroups(_ex, groupId, projectIds) {
+      for (const projectId of projectIds) {
+        if (!groupVisible(projectId, [groupId])) state.groups.push({ groupId, projectId });
+      }
+    },
   };
+  /** 全部记录，创建时间降序，同一时刻按编号降序（和真仓储同一个次序）。 */
+  function sortedProjects(): ProjectRecord[] {
+    return [...state.projects]
+      .sort(
+        (a, b) =>
+          b.createdAt.getTime() - a.createdAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0),
+      )
+      .map((project) => ({ ...project }));
+  }
+  /** 照可见性的范围算一条记录看不看得见（和 repo.ts 的 scopeCondition 同一条）。 */
+  function visible(project: ProjectRecord, scope: VisibilityScope): boolean {
+    if (scope.kind === "all") return true;
+    if (project.createdById === scope.creatorId) return true;
+    return scope.groupIds.length > 0 && groupVisible(project.id, scope.groupIds);
+  }
   return repo;
 }
 
@@ -92,7 +137,8 @@ export interface FakeEventLog {
   executors: (Tx | undefined)[];
 }
 
-const EVENT_NAME = /^[a-z][a-z0-9-]*\.[a-z][a-z-]*(?:\.[a-z][a-z-]*)?$/;
+// 和契约包的 eventName 同一条（2026-11-28 放宽到四段：identity.user.password.reset）。真的事件日志在信封上查一遍，这里照做。
+const EVENT_NAME = /^[a-z][a-z0-9-]*\.[a-z][a-z-]*(?:\.[a-z][a-z-]*){0,2}$/;
 
 export function createFakeEventLog(): FakeEventLog {
   const emitted: EmitInput[] = [];

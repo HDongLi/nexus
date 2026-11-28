@@ -285,6 +285,8 @@ describe("会话的有效期与顺延", () => {
     clock.tick(14 * DAY_MS);
     expect(await service.authenticate("token-a")).toEqual({
       user: expect.objectContaining({ username: "alice" }),
+      // 认证结果带着这个人所属的用户组编号；这个人不在任何组里，是空数组（规格 G-34）
+      groupIds: [],
       renewed: false,
     });
     expect(repo.state.sessions[0]?.expiresAt).toEqual(new Date(T0.getTime() + 30 * DAY_MS));

@@ -65,7 +65,9 @@ async function withProject(options: Parameters<typeof stage>[2] = {}) {
 
 describe("改显示名和头像字", () => {
   it("谁能改：看得见的旁人 403 projects_forbidden，创建者 200，管理员 200（P-29）", async () => {
-    const { api, id, bob, alice, chief } = await withProject({ canSee: () => true });
+    const { api, id, bob, alice, chief } = await withProject({
+      canSee: () => ({ kind: "all" as const }),
+    });
 
     const bystander = await patch(api.app, bob, id, { displayName: "乙改的" });
     expect(bystander.status).toBe(403);
