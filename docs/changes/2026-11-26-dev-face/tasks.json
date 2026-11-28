@@ -294,5 +294,85 @@
       "docs/adr/0002-模块解剖与契约管线.md",
       "docs/changes/2026-11-26-dev-face/design-02-projects.md"
     ]
+  },
+  {
+    "id": "T-0025",
+    "title": "实现：人员与用户组（后端）",
+    "domain": "identity",
+    "depends_on": ["T-0012", "T-0019"],
+    "scope": [
+      "modules/identity/**",
+      "modules/projects/**",
+      "apps/api/**",
+      "packages/api-client/**",
+      "packages/contracts/**",
+      "packages/http-kit/**",
+      "packages/db/**",
+      "**/package.json",
+      "pnpm-workspace.yaml",
+      "turbo.json",
+      "docs/changes/2026-11-26-dev-face/design-03-people.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md",
+      "README.md"
+    ],
+    "acceptance": [
+      "pnpm contracts -- --check",
+      "pnpm --filter @nexus/identity test",
+      "pnpm --filter @nexus/projects test",
+      "pnpm --filter @nexus/api test:integration",
+      "pnpm verify"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/identity.md",
+      "docs/spec/people.md",
+      "docs/spec/projects.md",
+      "docs/changes/2026-11-26-dev-face/design-01-login.md",
+      "docs/changes/2026-11-26-dev-face/design-02-projects.md",
+      "docs/changes/2026-11-26-dev-face/design-03-people.md",
+      "docs/adr/0002-模块解剖与契约管线.md",
+      "docs/adr/0003-工具链约定与质量闸.md",
+      "modules/identity/module.md",
+      "modules/projects/module.md",
+      "modules/event-log/module.md",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0026",
+    "title": "实现：人员页与用户组页（前端）",
+    "domain": "web",
+    "depends_on": ["T-0013", "T-0025"],
+    "scope": ["apps/web/**", "packages/ui-kit/**"],
+    "acceptance": [
+      "pnpm --filter @nexus/web test",
+      "pnpm --filter @nexus/web typecheck",
+      "pnpm gate:l3"
+    ],
+    "context": [
+      "docs/charter.md",
+      "docs/spec/people.md",
+      "docs/changes/2026-11-26-dev-face/design-03-people.md",
+      "docs/changes/2026-11-26-dev-face/review-01-login.md",
+      "docs/adr/0004-视觉语言.md",
+      "packages/api-client/openapi.json",
+      "AGENTS.md"
+    ]
+  },
+  {
+    "id": "T-0027",
+    "title": "审查：第 3 片",
+    "domain": "identity",
+    "depends_on": ["T-0026"],
+    "scope": ["docs/changes/2026-11-26-dev-face/review-03-people.md"],
+    "acceptance": ["审查报告里每条结论都有复现步骤或命令输出作证"],
+    "context": [
+      "docs/spec/identity.md",
+      "docs/spec/people.md",
+      "docs/changes/2026-11-26-dev-face/design-03-people.md",
+      "docs/changes/2026-11-26-dev-face/tasks.json",
+      "AGENTS.md"
+    ]
   }
 ]
